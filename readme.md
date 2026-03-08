@@ -142,7 +142,7 @@ Pull requests, bug reports, and feature ideas are welcome in [Issues](https://gi
 If this plugin saved you time or made your workflow better, a small donation means a lot and helps keep the project alive. Thank you! 🙏
 
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/raihancodes)
-[![PayPal](https://img.shields.io/badge/PayPal-Donate-0070BA?logo=paypal&logoColor=white)](https://paypal.me/raihanramadhan)
+[![PayPal](https://img.shields.io/badge/PayPal-Donate-0070BA?logo=paypal&logoColor=white)](https://paypal.me/raihancodes)
 
 ---
 
