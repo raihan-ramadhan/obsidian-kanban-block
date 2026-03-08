@@ -1,0 +1,10 @@
+{
+  "id": "kanban-block",
+  "name": "Kanban Block",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Render a kanban board inside a code block. Use ```kanban to create boards.",
+  "author": "Raihan Ramadhan",
+  "authorUrl": "https://github.com/raihan-ramadhan",
+  "isDesktopOnly": false
+}
