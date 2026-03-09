@@ -6,7 +6,13 @@ import {
   Editor,
   Menu,
   MenuItem,
+  setIcon,
 } from "obsidian";
+
+// ─── Icon helper ─────────────────────────────────────────────────────────────
+function si(element: HTMLElement, iconName: string) {
+  setIcon(element, iconName);
+}
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
 
@@ -664,12 +670,14 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // ── Search bar — created once, never destroyed ──
     const searchWrap = div("kanban-search-wrap");
-    const searchIcon = el("span", { cls: "kanban-search-icon", text: "🔍" });
+    const searchIcon = el("span", { cls: "kanban-search-icon" });
+    si(searchIcon, "search");
     const searchInput = el("input", {
       cls: "kanban-search-input",
       attr: { type: "text", placeholder: "Search cards..." },
     }) as HTMLInputElement;
-    const clearBtn = el("button", { cls: "kanban-search-clear", text: "×" });
+    const clearBtn = el("button", { cls: "kanban-search-clear" });
+    si(clearBtn, "x");
     clearBtn.style.display = "none";
     clearBtn.addEventListener("click", () => {
       this.searchQuery = "";
@@ -861,11 +869,9 @@ class KanbanRenderer extends MarkdownRenderChild {
     badge.style.pointerEvents = "none";
 
     // ── + Add Card button in header ──
-    const headerAddBtn = el("button", {
-      cls: "kanban-header-add-btn",
-      text: "+",
-    });
+    const headerAddBtn = el("button", { cls: "kanban-header-add-btn" });
     headerAddBtn.title = "Add card";
+    si(headerAddBtn, "plus");
 
     // ── Header drag — entire header is drag handle ──────────────────────────
     // header.draggable = true permanently so browser can start drag from any child.
@@ -962,8 +968,9 @@ class KanbanRenderer extends MarkdownRenderChild {
     });
 
     // ── Column options button (⋯) — replaces grip ────────────────────────────
-    const gripBtn = el("button", { cls: "kanban-grip-btn", text: "⋯" });
+    const gripBtn = el("button", { cls: "kanban-grip-btn" });
     gripBtn.title = "Column options";
+    si(gripBtn, "more-horizontal");
 
     // ── Column dropdown menu ──────────────────────────────────────────────────
     let colMenuEl: HTMLElement | null = null;
@@ -1039,22 +1046,25 @@ class KanbanRenderer extends MarkdownRenderChild {
       }
       colMenuEl = div("kanban-card-dropdown");
 
-      const mkItem = (icon: string, label: string, danger = false) => {
+      const mkItem = (iconName: string, label: string, danger = false) => {
         const item = div(
           "kanban-dropdown-item" + (danger ? " kanban-dropdown-danger" : ""),
         );
-        item.innerHTML = `<span class="kanban-dropdown-icon">${icon}</span><span>${label}</span>`;
+        const iconEl = el("span", { cls: "kanban-dropdown-icon" });
+        si(iconEl, iconName);
+        item.appendChild(iconEl);
+        item.appendChild(el("span", { text: label }));
         return item;
       };
 
-      const editItem = mkItem("✏️", "Edit Title");
+      const editItem = mkItem("pencil", "Edit Title");
       editItem.addEventListener("click", (e) => {
         e.stopPropagation();
         doEditTitle();
       });
       colMenuEl.appendChild(editItem);
 
-      const delItem = mkItem("🗑️", "Delete Column", true);
+      const delItem = mkItem("trash-2", "Delete Column", true);
       delItem.addEventListener("click", (e) => {
         e.stopPropagation();
         doDeleteCol();
@@ -1257,12 +1267,14 @@ class KanbanRenderer extends MarkdownRenderChild {
         const ghostPill = el("span", { cls: "kanban-ghost-pill" });
         ghostPill.title = `Create page: ${wikilinkTarget}`;
 
-        const ghostIcon = el("span", { cls: "kanban-ghost-icon", text: "📄" });
+        const ghostIcon = el("span", { cls: "kanban-ghost-icon" });
+        si(ghostIcon, "file-plus");
         const ghostName = el("span", {
           cls: "kanban-ghost-name",
           text: wikilinkTarget,
         });
-        const ghostBadge = el("span", { cls: "kanban-ghost-badge", text: "+" });
+        const ghostBadge = el("span", { cls: "kanban-ghost-badge" });
+        si(ghostBadge, "plus");
         ghostBadge.title = `Create: ${wikilinkTarget}`;
 
         ghostPill.appendChild(ghostIcon);
@@ -1315,7 +1327,8 @@ class KanbanRenderer extends MarkdownRenderChild {
     }
 
     // ── Single ⋯ menu button ─────────────────────────────────────────────────
-    const menuBtn = el("button", { cls: "kanban-card-menu-btn", text: "⋯" });
+    const menuBtn = el("button", { cls: "kanban-card-menu-btn" });
+    si(menuBtn, "more-horizontal");
     menuBtn.title = "Card options";
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -1471,30 +1484,33 @@ class KanbanRenderer extends MarkdownRenderChild {
       const isWikilink = !!wikilinkText;
       const linkedFileExists = isWikilink && !!getLinkedFile();
 
-      const mkItem = (icon: string, label: string, cls = "") => {
+      const mkItem = (iconName: string, label: string, cls = "") => {
         const item = div("kanban-dropdown-item" + (cls ? " " + cls : ""));
-        item.innerHTML = `<span class="kanban-dropdown-icon">${icon}</span><span>${label}</span>`;
+        const iconEl = el("span", { cls: "kanban-dropdown-icon" });
+        si(iconEl, iconName);
+        item.appendChild(iconEl);
+        item.appendChild(el("span", { text: label }));
         return item;
       };
       const mkSep = () => div("kanban-dropdown-sep");
 
       if (isWikilink && linkedFileExists) {
         // ── Wikilink card — file EXISTS ──
-        const tabItem = mkItem("📂", "Open in New Tab");
+        const tabItem = mkItem("folder-open", "Open in New Tab");
         tabItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doOpenLeaf("tab");
         });
         menuEl.appendChild(tabItem);
 
-        const rightItem = mkItem("➡️", "Open to the Right");
+        const rightItem = mkItem("panel-right-open", "Open to the Right");
         rightItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doOpenLeaf("split");
         });
         menuEl.appendChild(rightItem);
 
-        const winItem = mkItem("🪟", "Open in New Window");
+        const winItem = mkItem("picture-in-picture-2", "Open in New Window");
         winItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doOpenLeaf("window");
@@ -1503,14 +1519,14 @@ class KanbanRenderer extends MarkdownRenderChild {
 
         menuEl.appendChild(mkSep());
 
-        const renameItem = mkItem("✏️", "Rename");
+        const renameItem = mkItem("pencil", "Rename");
         renameItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doRename();
         });
         menuEl.appendChild(renameItem);
 
-        const delItem = mkItem("🗑️", "Delete", "kanban-dropdown-danger");
+        const delItem = mkItem("trash-2", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doDelete();
@@ -1518,7 +1534,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         menuEl.appendChild(delItem);
       } else if (isWikilink && !linkedFileExists) {
         // ── Wikilink card — file DOES NOT EXIST ──
-        const createItem = mkItem("📄", "Create Page");
+        const createItem = mkItem("file-plus", "Create Page");
         createItem.addEventListener("click", (e) => {
           e.stopPropagation();
           closeMenu();
@@ -1543,14 +1559,14 @@ class KanbanRenderer extends MarkdownRenderChild {
 
         menuEl.appendChild(mkSep());
 
-        const editItem = mkItem("✏️", "Edit");
+        const editItem = mkItem("pencil", "Edit");
         editItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doEdit();
         });
         menuEl.appendChild(editItem);
 
-        const delItem = mkItem("🗑️", "Delete", "kanban-dropdown-danger");
+        const delItem = mkItem("trash-2", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doDelete();
@@ -1558,21 +1574,21 @@ class KanbanRenderer extends MarkdownRenderChild {
         menuEl.appendChild(delItem);
       } else {
         // ── Plain card ──
-        const editItem = mkItem("✏️", "Edit");
+        const editItem = mkItem("pencil", "Edit");
         editItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doEdit();
         });
         menuEl.appendChild(editItem);
 
-        const pageItem = mkItem("📄", "Convert to Page");
+        const pageItem = mkItem("file-plus", "Convert to Page");
         pageItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doConvertToPage();
         });
         menuEl.appendChild(pageItem);
 
-        const delItem = mkItem("🗑️", "Delete", "kanban-dropdown-danger");
+        const delItem = mkItem("trash-2", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doDelete();
@@ -1757,10 +1773,16 @@ class KanbanRenderer extends MarkdownRenderChild {
     const menu = document.createElement("div");
     menu.className = "kanban-ctx-menu";
 
-    const mkItem = (icon: string, label: string, cls = "") => {
+    const mkItem = (iconName: string, label: string, cls = "") => {
       const item = document.createElement("div");
       item.className = "kanban-ctx-item" + (cls ? " " + cls : "");
-      item.innerHTML = `<span class="kanban-ctx-icon">${icon}</span><span>${label}</span>`;
+      const iconEl = document.createElement("span");
+      iconEl.className = "kanban-ctx-icon";
+      si(iconEl, iconName);
+      item.appendChild(iconEl);
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      item.appendChild(labelEl);
       return item;
     };
     const mkSep = () => {
@@ -1770,7 +1792,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     };
 
     // ── Add Column ────────────────────────────────────────────────────────────
-    const addColItem = mkItem("➕", "Add Column");
+    const addColItem = mkItem("plus-circle", "Add Column");
     addColItem.addEventListener("click", async () => {
       menu.remove();
       const addColBtn = this.boardScrollEl?.querySelector<HTMLElement>(
@@ -1800,7 +1822,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     menu.appendChild(mkSep());
 
     // ── Edit Directives ───────────────────────────────────────────────────────
-    const editDirItem = mkItem("⚙️", "Edit Directives");
+    const editDirItem = mkItem("settings", "Edit Directives");
     editDirItem.addEventListener("click", () => {
       menu.remove();
       this.showDirectivesModal();
@@ -1810,7 +1832,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     menu.appendChild(mkSep());
 
     // ── Copy Source ───────────────────────────────────────────────────────────
-    const copyItem = mkItem("📋", "Copy Board Source");
+    const copyItem = mkItem("clipboard", "Copy Board Source");
     copyItem.addEventListener("click", () => {
       menu.remove();
       navigator.clipboard
@@ -1863,7 +1885,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     title.className = "kanban-modal-msg";
     title.style.fontWeight = "600";
     title.style.fontSize = "1em";
-    title.textContent = "⚙️ Board Directives";
+    title.textContent = "Board Directives";
     modal.appendChild(title);
 
     const mkField = (label: string, value: string, placeholder: string) => {
@@ -1997,11 +2019,11 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-column-header{display:flex;align-items:center;gap:4px;padding-bottom:6px;border-bottom:2px solid var(--interactive-accent);cursor:grab;user-select:none}
       .kanban-column-title{font-weight:700;font-size:.9em;flex:1;cursor:pointer;color:var(--text-normal);user-select:none}
       .kanban-count-badge{background:var(--interactive-accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:.75em;font-weight:700}
-      .kanban-header-add-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1em;padding:0 4px;border-radius:4px;line-height:1;font-weight:300}
+      .kanban-header-add-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;border-radius:4px;display:flex;align-items:center;justify-content:center}.kanban-header-add-btn svg{width:15px;height:15px}
       .kanban-header-add-btn:hover{color:var(--interactive-accent);background:var(--background-modifier-hover)}
       .kanban-column-header:active{cursor:grabbing}
       .kanban-col-dragging{opacity:.5;outline:2px dashed var(--interactive-accent);outline-offset:2px;border-radius:10px}
-      .kanban-grip-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2em;padding:0 4px;border-radius:4px;line-height:1;letter-spacing:1px}
+      .kanban-grip-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;border-radius:4px;display:flex;align-items:center;justify-content:center}.kanban-grip-btn svg{width:15px;height:15px}
       .kanban-grip-btn:hover{color:var(--text-normal);background:var(--background-modifier-hover)}
       .kanban-cards-wrapper{position:relative;border-radius:6px}.kanban-cards-wrapper.kanban-cards-shadow::after{content:'';position:absolute;bottom:0;left:0;right:0;height:32px;border-radius:0 0 6px 6px;background:linear-gradient(to bottom,transparent,rgba(0,0,0,0.13));pointer-events:none;z-index:1}.kanban-cards{display:flex;flex-direction:column;gap:7px;min-height:40px;border-radius:6px;padding:2px;transition:background .15s}.kanban-cards::-webkit-scrollbar{display:none}.kanban-cards{scrollbar-width:none;-ms-overflow-style:none}
       .kanban-drop-indicator{display:none;height:3px;border-radius:3px;background:var(--interactive-accent);margin:2px 0;pointer-events:none;box-shadow:0 0 6px var(--interactive-accent);transition:none}
@@ -2012,7 +2034,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-card-text{font-size:.88em;color:var(--text-normal);display:block;line-height:1.45;padding-right:28px}
       .kanban-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
       .kanban-tag{font-size:.7em;color:#fff;border-radius:8px;padding:1px 7px;font-weight:600}
-      .kanban-card-menu-btn{position:absolute;top:6px;right:6px;background:transparent;border:none;cursor:pointer;font-size:1em;padding:0 4px;border-radius:4px;opacity:0;transition:opacity .15s;color:var(--text-muted);line-height:1.2;letter-spacing:1px}
+      .kanban-card-menu-btn{position:absolute;top:6px;right:6px;background:transparent;border:none;cursor:pointer;padding:2px 3px;border-radius:4px;opacity:0;transition:opacity .15s;color:var(--text-muted);display:flex;align-items:center;justify-content:center}.kanban-card-menu-btn svg{width:14px;height:14px}
       .kanban-card-menu-btn:hover{opacity:1!important;background:var(--background-modifier-hover);color:var(--text-normal)}
       .kanban-card-dropdown{position:fixed;z-index:9999;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:160px;padding:4px;display:flex;flex-direction:column;gap:2px}
       .kanban-dropdown-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:5px;cursor:pointer;font-size:.85em;color:var(--text-normal);user-select:none}
@@ -2020,7 +2042,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-dropdown-danger{color:#e74c3c}
       .kanban-dropdown-danger:hover{background:rgba(231,76,60,.1)}
       .kanban-dropdown-sep{height:1px;background:var(--background-modifier-border);margin:4px 0}
-      .kanban-dropdown-icon{font-size:.9em;width:18px;text-align:center;flex-shrink:0}
+      .kanban-dropdown-icon{display:flex;align-items:center;justify-content:center;width:16px;height:16px;flex-shrink:0}.kanban-dropdown-icon svg{width:14px;height:14px}
       .kanban-add-card-btn{background:transparent;border:1px dashed var(--background-modifier-border);color:var(--text-muted);border-radius:7px;padding:6px;cursor:pointer;width:100%;font-size:.82em}
       .kanban-add-card-btn:hover{background:var(--background-modifier-hover);color:var(--text-normal)}
       .kanban-add-col-btn{background:var(--background-secondary);border:2px dashed var(--background-modifier-border);color:var(--text-muted);border-radius:10px;padding:10px 18px;cursor:pointer;font-size:.85em;align-self:flex-start;white-space:nowrap}
@@ -2034,10 +2056,10 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-inline-input{font-weight:700;font-size:.9em;background:var(--background-primary);border:1px solid var(--interactive-accent);border-radius:4px;padding:2px 6px;color:var(--text-normal);width:100%;box-sizing:border-box}
       .kanban-inline-error{font-size:.72em;color:#e74c3c;line-height:1.2;padding:0 2px}
       .kanban-search-wrap{display:flex;align-items:center;gap:6px;margin-bottom:8px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);border-radius:8px;padding:5px 10px;width:100%;box-sizing:border-box;flex-shrink:0}
-      .kanban-search-icon{font-size:.9em;opacity:.5;flex-shrink:0}
+      .kanban-search-icon{display:flex;align-items:center;opacity:.5;flex-shrink:0;width:16px;height:16px}.kanban-search-icon svg{width:16px;height:16px}
       .kanban-search-input{flex:1;background:transparent;border:none;outline:none;color:var(--text-normal);font-size:.88em;min-width:0}
       .kanban-search-input::placeholder{color:var(--text-muted)}
-      .kanban-search-clear{background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1em;padding:0 2px;border-radius:4px;align-items:center;justify-content:center;line-height:1;flex-shrink:0}
+      .kanban-search-clear{background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:0 2px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;width:20px;height:20px}.kanban-search-clear svg{width:14px;height:14px}
       .kanban-search-clear:hover{color:var(--text-normal);background:var(--background-modifier-hover)}
       .kanban-highlight{background:rgba(255,213,0,.45);border-radius:2px;padding:0 1px;color:inherit}
       .kanban-search-empty{text-align:center;color:var(--text-muted);font-size:.8em;padding:10px 0;font-style:italic}
@@ -2045,15 +2067,15 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-card-link:hover{color:var(--link-color-hover, var(--interactive-accent-hover));text-decoration:underline}
       .kanban-ghost-pill{display:inline-flex;align-items:center;gap:4px;cursor:pointer;border-radius:6px;padding:2px 4px 2px 2px;transition:background .15s;max-width:100%;overflow:hidden}
       .kanban-ghost-pill:hover{background:rgba(0,0,0,.04)}
-      .kanban-ghost-icon{font-size:.78em;opacity:.5;flex-shrink:0;line-height:1}
+      .kanban-ghost-icon{display:flex;align-items:center;opacity:.6;flex-shrink:0}.kanban-ghost-icon svg{width:12px;height:12px}
       .kanban-ghost-name{color:var(--link-color,var(--interactive-accent));font-size:.88em;font-weight:500;text-decoration:underline;text-decoration-style:dashed;text-underline-offset:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .kanban-ghost-badge{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--interactive-accent);color:#fff;font-size:11px;font-weight:700;line-height:1;flex-shrink:0;transition:transform .15s,opacity .15s;opacity:.9}
+      .kanban-ghost-badge{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--interactive-accent);color:#fff;flex-shrink:0;transition:transform .15s,opacity .15s;opacity:.9}.kanban-ghost-badge svg{width:10px;height:10px;stroke:#fff}
       .kanban-ghost-pill:hover .kanban-ghost-badge{opacity:1;transform:scale(1.1)}
       .kanban-ctx-menu{background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:8px;padding:4px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:99999}
       .kanban-ctx-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:.88em;color:var(--text-normal);transition:background .1s}
       .kanban-ctx-item:hover{background:var(--background-modifier-hover)}
       .kanban-ctx-item.kanban-ctx-danger{color:#e74c3c}
-      .kanban-ctx-icon{font-size:.95em;width:18px;text-align:center;flex-shrink:0}
+      .kanban-ctx-icon{display:flex;align-items:center;justify-content:center;width:16px;height:16px;flex-shrink:0}.kanban-ctx-icon svg{width:14px;height:14px}
       .kanban-ctx-sep{height:1px;background:var(--background-modifier-border);margin:4px 8px}
       .kanban-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99999}
       .kanban-modal{background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;padding:20px 22px;min-width:220px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:16px}

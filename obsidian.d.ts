@@ -95,4 +95,6 @@ declare module "obsidian" {
     onload(): Promise<void> | void;
     onunload(): void;
   }
+
+  function setIcon(el: HTMLElement, iconId: string): void;
 }
