@@ -114,7 +114,7 @@ function parseKanban(source: string): KanbanColumn[] {
       (trimmed.startsWith("- ") || trimmed.startsWith("* ")) &&
       currentColumn
     ) {
-      const cardText = trimmed.slice(2).trim();
+      const cardText = trimmed.slice(2).trim().replace(/\\n/g, "\n");
       const tags = cardText.match(/#[\w-]+/g) || [];
       currentColumn.cards.push({ id: generateId(), text: cardText, tags });
     } else {
@@ -156,6 +156,8 @@ function escapeRegex(s: string): string {
 function kanbanConfirm(
   message: string,
   anchorEl: HTMLElement,
+  confirmLabel = "Delete",
+  danger = true,
 ): Promise<boolean> {
   return new Promise((resolve) => {
     // Backdrop
@@ -178,8 +180,8 @@ function kanbanConfirm(
 
     const confirmBtn = document.createElement("button");
     confirmBtn.className = "kanban-save-btn";
-    confirmBtn.textContent = "Delete";
-    confirmBtn.style.background = "#e74c3c";
+    confirmBtn.textContent = confirmLabel;
+    if (danger) confirmBtn.style.background = "#e74c3c";
 
     const close = (result: boolean) => {
       backdrop.remove();
@@ -362,12 +364,17 @@ function extractWikilink(text: string): string | null {
   return m ? m[1] : null;
 }
 
-// Build a safe filename from card text: strip tags, take first 50 words, sanitize
+// Build a safe filename from card text: use first line only, strip tags, sanitize
 function cardTextToFilename(text: string): string {
-  const stripped = text.replace(/#[\w-]+/g, "").trim();
-  const words = stripped.split(/\s+/).slice(0, 50).join(" ");
-  // Remove characters not allowed in filenames
-  return words.replace(/[\\/:*?"<>|#^\[\]]/g, "").trim();
+  const firstLine = text.split("\n")[0];
+  const stripped = firstLine.replace(/#[\w-]+/g, "").trim();
+  return stripped.replace(/[\\/:*?"<>|#^\[\]]/g, "").trim();
+}
+
+// Extract body content (lines after first) from card text
+function cardTextToBody(text: string): string {
+  const lines = text.split("\n");
+  return lines.slice(1).join("\n").trim();
 }
 
 // Get folder path from a file path (everything before last slash)
@@ -392,7 +399,13 @@ function serializeKanban(
   }
 
   for (const col of columns) {
-    const cards = col.cards.map((c) => `- ${c.text}`).join("\n");
+    const cards = col.cards
+      .map((c) => {
+        // Encode newlines as literal \\n so multi-line cards stay on one line
+        const encoded = c.text.replace(/\n/g, "\\n");
+        return `- ${encoded}`;
+      })
+      .join("\n");
     const colHeader = col.title ? `## ${col.title}` : "##";
     let colBlock = `${colHeader}\n${cards}`;
     // Re-attach trailing raw lines that belonged to this column
@@ -1481,7 +1494,20 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     const doConvertToPage = async () => {
       closeMenu();
-      const filename = cardTextToFilename(card.text);
+
+      // Split card text by literal \n (our encoding) OR real newline — handle both
+      const lines = card.text
+        .split(/\\n|\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      const firstLine = lines[0] || "";
+      const restLines = lines.slice(1);
+
+      // Build filename from first line
+      const filename = firstLine
+        .replace(/#[\w-]+/g, "")
+        .replace(/[\\/:*?"<>|#^\[\]]/g, "")
+        .trim();
       if (!filename) return;
 
       // Ensure pages folder exists
@@ -1491,10 +1517,28 @@ class KanbanRenderer extends MarkdownRenderChild {
       }
 
       const filePath = `${pagesFolder}/${filename}.md`;
-      const existing = this.obsApp.vault.getFileByPath(filePath);
-      if (!existing)
-        await this.obsApp.vault.create(filePath, `# ${filename}\n`);
+      const pageExists = !!this.obsApp.vault.getFileByPath(filePath);
 
+      // Always warn user if page already exists
+      if (pageExists) {
+        const msg =
+          restLines.length > 0
+            ? `"${filename}" already exists. The extra lines will be discarded. Continue?`
+            : `"${filename}" already exists. The card will link to it. Continue?`;
+        const confirmed = await kanbanConfirm(msg, menuBtn, "Continue", false);
+        if (!confirmed) return;
+      }
+
+      // Create file only if it doesn't exist yet
+      if (!pageExists) {
+        const pageContent =
+          restLines.length > 0
+            ? `# ${filename}\n\n${restLines.join("\n")}\n`
+            : `# ${filename}\n`;
+        await this.obsApp.vault.create(filePath, pageContent);
+      }
+
+      // Card becomes just [[link]] — rest of lines go into page content
       const tags = (card.text.match(/#[\w-]+/g) || []).join(" ");
       card.text = tags ? `[[${filename}]] ${tags}` : `[[${filename}]]`;
       card.tags = card.text.match(/#[\w-]+/g) || [];
@@ -2134,7 +2178,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.15)}
       .kanban-card:hover .kanban-card-menu-btn{opacity:1}
       .kanban-card.kanban-dragging{opacity:.4;cursor:grabbing}
-      .kanban-card-text{font-size:.88em;color:var(--text-normal);display:block;line-height:1.45;padding-right:28px}
+      .kanban-card-text{font-size:.88em;color:var(--text-normal);display:block;line-height:1.45;padding-right:28px;white-space:pre-wrap}
       .kanban-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
       .kanban-tag{font-size:.7em;color:#fff;border-radius:8px;padding:1px 7px;font-weight:600}
       .kanban-card-menu-btn{position:absolute;top:6px;right:6px;background:transparent!important;border:none;cursor:pointer;padding:0;border-radius:4px;opacity:0;transition:opacity .15s ease,background .15s ease,color .15s ease;color:var(--text-muted);display:flex;align-items:center;justify-content:center;box-shadow:none!important;width:22px;height:22px}.kanban-card-menu-btn svg{width:14px;height:14px}
