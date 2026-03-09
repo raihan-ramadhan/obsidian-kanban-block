@@ -1795,7 +1795,22 @@ class KanbanRenderer extends MarkdownRenderChild {
       }, 0);
     };
 
+    // ── Quick edit/rename button (pencil) — visible on hover like menuBtn ──────
+    const isWikilinkCard = !!extractWikilink(card.text);
+    const quickEditBtn = el("button", { cls: "kanban-card-quick-edit-btn" });
+    si(quickEditBtn, "pencil");
+    quickEditBtn.title = isWikilinkCard ? "Rename page" : "Edit card";
+    quickEditBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (isWikilinkCard) {
+        doRename();
+      } else {
+        doEdit();
+      }
+    });
+
     menuBtn.addEventListener("click", openMenu);
+    cardEl.appendChild(quickEditBtn);
     cardEl.appendChild(menuBtn);
     cardsEl.appendChild(cardEl);
   }
@@ -2238,6 +2253,9 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-card-text{font-size:.88em;color:var(--text-normal);display:block;line-height:1.45;padding-right:28px;white-space:pre-wrap}
       .kanban-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
       .kanban-tag{font-size:.7em;color:#fff;border-radius:8px;padding:1px 7px;font-weight:600}
+      .kanban-card-quick-edit-btn{position:absolute;top:6px;right:32px;background:transparent!important;border:none;cursor:pointer;padding:0;border-radius:4px;opacity:0;transition:opacity .15s ease,background .15s ease,color .15s ease;color:var(--text-muted);display:flex;align-items:center;justify-content:center;box-shadow:none!important;width:22px;height:22px}.kanban-card-quick-edit-btn svg{width:13px;height:13px}
+      .kanban-card:hover .kanban-card-quick-edit-btn{opacity:1}
+      .kanban-card-quick-edit-btn:hover{opacity:1!important;background:var(--background-modifier-hover)!important;color:var(--text-normal)!important}
       .kanban-card-menu-btn{position:absolute;top:6px;right:6px;background:transparent!important;border:none;cursor:pointer;padding:0;border-radius:4px;opacity:0;transition:opacity .15s ease,background .15s ease,color .15s ease;color:var(--text-muted);display:flex;align-items:center;justify-content:center;box-shadow:none!important;width:22px;height:22px}.kanban-card-menu-btn svg{width:14px;height:14px}
       .kanban-card-menu-btn:hover{opacity:1!important;background:var(--background-modifier-hover)!important;color:var(--text-normal)!important}
       .kanban-card-dropdown{position:fixed;z-index:9999;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.22),0 2px 6px rgba(0,0,0,.1);min-width:170px;padding:4px;display:flex;flex-direction:column;gap:2px}
