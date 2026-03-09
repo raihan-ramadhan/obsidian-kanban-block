@@ -1054,6 +1054,17 @@ class KanbanRenderer extends MarkdownRenderChild {
         return s;
       };
 
+      // Add Card
+      const addCardItem = mkItem("plus", "Add Card");
+      addCardItem.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeColMenu();
+        this.showAddCardInput(cardsEl, col);
+      });
+      colMenuEl.appendChild(addCardItem);
+
+      colMenuEl.appendChild(mkSep());
+
       // Edit Title
       const editItem = mkItem("pencil", "Edit Title");
       editItem.addEventListener("click", (e) => {
