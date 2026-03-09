@@ -178,7 +178,12 @@ function kanbanConfirm(
 
     const msg = document.createElement("p");
     msg.className = "kanban-modal-msg";
-    msg.textContent = message;
+    // Support HTML message (for styled highlights)
+    if (message.includes("<")) {
+      msg.innerHTML = message;
+    } else {
+      msg.textContent = message;
+    }
 
     const btnRow = document.createElement("div");
     btnRow.className = "kanban-modal-btns";
@@ -1761,14 +1766,45 @@ class KanbanRenderer extends MarkdownRenderChild {
       }
 
       const filePath = `${pagesFolder}/${filename}.md`;
-      const pageExists = !!this.obsApp.vault.getFileByPath(filePath);
 
-      // Always warn user if page already exists
+      // Case-insensitive search for existing file in pages folder
+      // Case-insensitive file lookup: check exact path first, then scan folder
+      let existingFile = this.obsApp.vault.getFileByPath(filePath) as {
+        path: string;
+        name: string;
+      } | null;
+      if (!existingFile) {
+        const folder = this.obsApp.vault.getAbstractFileByPath(
+          pagesFolder,
+        ) as any;
+        const children: { path: string; name: string }[] =
+          folder?.children ?? [];
+        existingFile =
+          children.find(
+            (f: { path: string; name: string }) =>
+              f.path.toLowerCase() === filePath.toLowerCase(),
+          ) ?? null;
+      }
+      const pageExists = !!existingFile;
+      // Use the actual existing filename (correct case) if found
+      const actualFilename = existingFile
+        ? existingFile.name.replace(/\.md$/, "")
+        : filename;
+      const actualFilePath = existingFile ? existingFile.path : filePath;
+
+      // Warn user if page already exists
       if (pageExists) {
-        const msg =
-          restLines.length > 0
-            ? `"${filename}" already exists. The extra lines will be discarded. Continue?`
-            : `"${filename}" already exists. The card will link to it. Continue?`;
+        const caseChanged = actualFilename !== filename;
+        let msg: string;
+        if (caseChanged && restLines.length > 0) {
+          msg = `A note named <strong>"${actualFilename}"</strong> already exists — your text <strong>"${filename}"</strong> will be matched to it.<br><span class="kanban-modal-warn">The extra lines will be discarded.</span>`;
+        } else if (caseChanged) {
+          msg = `A note named <strong>"${actualFilename}"</strong> already exists — your text <strong>"${filename}"</strong> will be matched to it.<br>The card will link to <strong>"${actualFilename}"</strong>.`;
+        } else if (restLines.length > 0) {
+          msg = `<strong>"${actualFilename}"</strong> already exists.<br><span class="kanban-modal-warn">The extra lines will be discarded.</span>`;
+        } else {
+          msg = `<strong>"${actualFilename}"</strong> already exists. The card will link to it.`;
+        }
         const confirmed = await kanbanConfirm(msg, menuBtn, "Continue", false);
         if (!confirmed) return;
       }
@@ -1779,12 +1815,14 @@ class KanbanRenderer extends MarkdownRenderChild {
           restLines.length > 0
             ? `# ${filename}\n\n${restLines.join("\n")}\n`
             : `# ${filename}\n`;
-        await this.obsApp.vault.create(filePath, pageContent);
+        await this.obsApp.vault.create(actualFilePath, pageContent);
       }
 
-      // Card becomes just [[link]] — rest of lines go into page content
+      // Card becomes [[actualFilename]] — use correct case
       const tags = (card.text.match(/#[\w-]+/g) || []).join(" ");
-      card.text = tags ? `[[${filename}]] ${tags}` : `[[${filename}]]`;
+      card.text = tags
+        ? `[[${actualFilename}]] ${tags}`
+        : `[[${actualFilename}]]`;
       card.tags = card.text.match(/#[\w-]+/g) || [];
       card.updatedAt = nowISO();
       await this.saveAndRender();
@@ -2921,6 +2959,9 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-modal-input{width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--interactive-accent);background:var(--background-primary);color:var(--text-normal);font-size:.9em;box-sizing:border-box;outline:none}
       .kanban-modal-input-error{border-color:#e74c3c!important;}
       .kanban-modal-error{margin:4px 0 0;font-size:.8em;color:#e74c3c}
+      .kanban-modal-warn{color:#e74c3c;font-weight:600}
+      .kanban-modal-msg strong{color:var(--text-normal)}
+      .kanban-modal-msg br{display:block;content:'';margin-top:6px}
       .kanban-props-submenu{position:fixed;z-index:10000;min-width:200px;padding:10px;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
       .kanban-props-header{margin-bottom:2px}
       .kanban-props-header-title{font-size:.72em;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em}
