@@ -1830,6 +1830,144 @@ class KanbanRenderer extends MarkdownRenderChild {
       await this.saveAndRender();
     };
 
+    const openPropsSubmenu = (anchor: HTMLElement) => {
+      // Remove existing submenu
+      document.querySelector(".kanban-props-submenu")?.remove();
+
+      const sub = div("kanban-props-submenu");
+
+      // Header
+      const hdr = div("kanban-props-header");
+      hdr.appendChild(
+        el("span", { cls: "kanban-props-header-title", text: "Properties" }),
+      );
+      sub.appendChild(hdr);
+
+      // Tags row
+      const row = div("kanban-props-row");
+      const rowIcon = el("span", { cls: "kanban-props-label-icon" });
+      si(rowIcon, "hash");
+      const labelEl = el("span", { cls: "kanban-props-label", text: "Tags" });
+      const currentTags = (card.text.match(/#[\w-]+/g) || []).join(" ");
+      const input = el("input", {
+        cls: "kanban-props-input",
+      }) as HTMLInputElement;
+      input.value = currentTags;
+      input.placeholder = "#tag1 #tag2";
+      row.appendChild(rowIcon);
+      row.appendChild(labelEl);
+      row.appendChild(input);
+      sub.appendChild(row);
+
+      // Action row
+      const actionRow = div("kanban-props-action-row");
+      const saveBtn = el("button", { cls: "kanban-save-btn", text: "Save" });
+      const cancelBtn = el("button", {
+        cls: "kanban-cancel-btn",
+        text: "Cancel",
+      });
+
+      const closeSub = () => sub.remove();
+
+      const doSave = () => {
+        const rawInput = input.value.trim();
+        const newTags = rawInput
+          .split(/\s+/)
+          .filter((t: string) => t.length > 0)
+          .map((t: string) => (t.startsWith("#") ? t : "#" + t))
+          .join(" ");
+        const wikiPart = extractWikilink(card.text);
+        if (wikiPart) {
+          card.text = newTags
+            ? "[[" + wikiPart + "]] " + newTags
+            : "[[" + wikiPart + "]]";
+        } else {
+          const base = card.text.replace(/#[\w-]+/g, "").trim();
+          card.text = newTags ? base + " " + newTags : base;
+        }
+        card.tags = card.text.match(/#[\w-]+/g) || [];
+        card.updatedAt = nowISO();
+        closeSub();
+        closeMenu();
+        this.saveAndRender();
+      };
+
+      cancelBtn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        closeSub();
+      });
+      saveBtn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        doSave();
+      });
+      input.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          doSave();
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeSub();
+        }
+      });
+
+      actionRow.appendChild(cancelBtn);
+      actionRow.appendChild(saveBtn);
+      sub.appendChild(actionRow);
+
+      // Position: to the right of anchor (the menu item), aligned to its top
+      sub.style.position = "fixed";
+      document.body.appendChild(sub);
+      const ar = anchor.getBoundingClientRect();
+      const gap = 4;
+      requestAnimationFrame(() => {
+        const sr = sub.getBoundingClientRect();
+        let left = ar.right + gap;
+        if (left + sr.width > window.innerWidth - 8)
+          left = ar.left - sr.width - gap;
+        let top = ar.top + ar.height / 2 - sr.height / 2;
+        if (top + sr.height > window.innerHeight - 8)
+          top = window.innerHeight - sr.height - 8;
+        if (top < 8) top = 8;
+        sub.style.left = left + "px";
+        sub.style.top = top + "px";
+        input.focus();
+        input.select();
+      });
+
+      // Close on outside mousedown (allow clicks inside sub and menuEl)
+      const onSubOut = (e: MouseEvent) => {
+        const target = e.target as Node;
+        if (!sub.contains(target) && !menuEl?.contains(target)) {
+          closeSub();
+          closeMenu();
+          document.removeEventListener("mousedown", onSubOut, false);
+          document.removeEventListener("keydown", onSubEsc, false);
+        } else if (!sub.contains(target)) {
+          // Clicked inside main menu but outside sub — just close sub
+          closeSub();
+          document.removeEventListener("mousedown", onSubOut, false);
+          document.removeEventListener("keydown", onSubEsc, false);
+        }
+      };
+      const onSubEsc = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          closeSub();
+          document.removeEventListener("mousedown", onSubOut, false);
+          document.removeEventListener("keydown", onSubEsc, false);
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener("mousedown", onSubOut, false);
+        document.addEventListener("keydown", onSubEsc, false);
+      }, 0);
+    };
+
+    const doEditProperties = (anchor: HTMLElement) => {
+      openPropsSubmenu(anchor);
+    };
+
     const doOpenLeaf = (mode: "tab" | "split" | "window") => {
       closeMenu();
       const file = getLinkedFile();
@@ -1897,6 +2035,18 @@ class KanbanRenderer extends MarkdownRenderChild {
           doRename();
         });
         menuEl.appendChild(renameItem);
+
+        const propsItem = mkItem("sliders-horizontal", "Properties...");
+        // Show chevron arrow to indicate submenu
+        const propsChevron = el("span", { cls: "kanban-dropdown-chevron" });
+        si(propsChevron, "chevron-right");
+        propsItem.appendChild(propsChevron);
+        propsItem.addEventListener("mousedown", (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          doEditProperties(propsItem);
+        });
+        menuEl.appendChild(propsItem);
 
         const delItem = mkItem("trash-2", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
@@ -2771,6 +2921,15 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-modal-input{width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--interactive-accent);background:var(--background-primary);color:var(--text-normal);font-size:.9em;box-sizing:border-box;outline:none}
       .kanban-modal-input-error{border-color:#e74c3c!important;}
       .kanban-modal-error{margin:4px 0 0;font-size:.8em;color:#e74c3c}
+      .kanban-props-submenu{position:fixed;z-index:10000;min-width:200px;padding:10px;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+      .kanban-props-header{margin-bottom:2px}
+      .kanban-props-header-title{font-size:.72em;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em}
+      .kanban-props-row{display:flex;align-items:center;gap:6px}
+      .kanban-props-label-icon{display:flex;align-items:center;color:var(--text-muted);flex-shrink:0}.kanban-props-label-icon svg{width:13px;height:13px}
+      .kanban-props-label{font-size:.78em;font-weight:600;color:var(--text-muted);width:34px;flex-shrink:0}
+      .kanban-props-input{flex:1;background:var(--background-secondary)!important;border:1px solid var(--background-modifier-border)!important;border-radius:5px;padding:4px 8px;font-size:.85em;color:var(--text-normal);outline:none!important;box-shadow:none!important}.kanban-props-input:focus{border-color:var(--interactive-accent)!important}
+      .kanban-props-action-row{display:flex;justify-content:flex-end;gap:6px}
+      .kanban-dropdown-chevron{margin-left:auto;display:flex;align-items:center;color:var(--text-muted)}.kanban-dropdown-chevron svg{width:12px;height:12px}
       .kanban-dropdown-section-label{font-size:.7em;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;padding:6px 10px 3px;margin:0 2px}
       .kanban-dropdown-active{background:var(--background-modifier-hover)!important;color:var(--text-accent)!important;font-weight:600}
       .kanban-dropdown-check{margin-left:auto;display:flex;align-items:center;opacity:.7}.kanban-dropdown-check svg{width:12px;height:12px}
