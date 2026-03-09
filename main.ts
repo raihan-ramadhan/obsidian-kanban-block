@@ -1481,10 +1481,35 @@ class KanbanRenderer extends MarkdownRenderChild {
       const linkedFile = getLinkedFile();
       if (linkedFile) {
         const wt = extractWikilink(card.text)!;
-        const confirmed = await kanbanConfirm(
-          `Delete card and its linked page "${wt}.md"?`,
-          cardEl,
-        );
+
+        // Find other cards in any column that link to the same page
+        const otherRefs: { colTitle: string; cardText: string }[] = [];
+        for (const c of this.columns) {
+          for (const cd of c.cards) {
+            if (cd.id === card.id) continue;
+            if (extractWikilink(cd.text) === wt) {
+              // Show plain text preview — strip wikilinks/tags, max 40 chars
+              const preview =
+                cd.text
+                  .replace(/\[\[[^\]]+\]\]/g, "")
+                  .replace(/#[\w-]+/g, "")
+                  .trim() || wt;
+              const short =
+                preview.length > 40 ? preview.slice(0, 40) + "…" : preview;
+              otherRefs.push({ colTitle: c.displayTitle, cardText: short });
+            }
+          }
+        }
+
+        let msg = `Delete card and its linked page "${wt}.md"?`;
+        if (otherRefs.length > 0) {
+          const lines = otherRefs
+            .map((r) => `  • "${r.colTitle}" → ${r.cardText}`)
+            .join("\n");
+          msg += `\n\n⚠️ Also linked by:\n${lines}`;
+        }
+
+        const confirmed = await kanbanConfirm(msg, cardEl);
         if (!confirmed) return;
         await this.obsApp.vault.trash(linkedFile, true);
       }
@@ -2228,7 +2253,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-ctx-sep{height:1px;background:var(--background-modifier-border);margin:4px 8px}
       .kanban-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99999}
       .kanban-modal{background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;padding:20px 22px;min-width:220px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:16px}
-      .kanban-modal-msg{margin:0;font-size:.9em;color:var(--text-normal);line-height:1.5}
+      .kanban-modal-msg{margin:0;font-size:.9em;color:var(--text-normal);line-height:1.5;white-space:pre-wrap}
       .kanban-modal-btns{display:flex;gap:8px;justify-content:flex-end}
       .kanban-modal-input{width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--interactive-accent);background:var(--background-primary);color:var(--text-normal);font-size:.9em;box-sizing:border-box;outline:none}
       .kanban-modal-input-error{border-color:#e74c3c!important;}
