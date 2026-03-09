@@ -202,9 +202,7 @@ function kanbanConfirm(
     modal.appendChild(btnRow);
     backdrop.appendChild(modal);
 
-    // Mount inside the kanban container so it stays scoped
-    const root = anchorEl.closest(".kanban-plugin-container") ?? document.body;
-    root.appendChild(backdrop);
+    document.body.appendChild(backdrop);
     confirmBtn.focus();
   });
 }
@@ -242,8 +240,7 @@ function kanbanAlert(message: string, anchorEl: HTMLElement): Promise<void> {
     modal.appendChild(msg);
     modal.appendChild(btnRow);
     backdrop.appendChild(modal);
-    const root = anchorEl.closest(".kanban-plugin-container") ?? document.body;
-    root.appendChild(backdrop);
+    document.body.appendChild(backdrop);
     okBtn.focus();
   });
 }
@@ -346,8 +343,7 @@ function kanbanPrompt(
     modal.appendChild(btnRow);
     backdrop.appendChild(modal);
 
-    const root = anchorEl.closest(".kanban-plugin-container") ?? document.body;
-    root.appendChild(backdrop);
+    document.body.appendChild(backdrop);
     input.focus();
     input.select();
   });
@@ -634,6 +630,10 @@ function parseFormatVersion(source: string): number {
 
 // ─── Renderer ─────────────────────────────────────────────────────────────────
 
+// Static map — survives Obsidian re-mounting KanbanRenderer instances.
+// Key: sourcePath, Value: scrollLeft of boardScrollEl at time of last save.
+const _scrollRegistry = new Map<string, number>();
+
 class KanbanRenderer extends MarkdownRenderChild {
   private columns: KanbanColumn[];
   private source: string;
@@ -641,6 +641,9 @@ class KanbanRenderer extends MarkdownRenderChild {
   private obsApp: App;
   private searchQuery: string = "";
   private draggingColId: string | null = null;
+  private boardScrollEl: HTMLElement | null = null;
+  private boardEl: HTMLElement | null = null;
+  private scrollKey: string = "";
   constructor(
     containerEl: HTMLElement,
     source: string,
@@ -652,52 +655,65 @@ class KanbanRenderer extends MarkdownRenderChild {
     this.columns = parseKanban(source);
     this.ctx = ctx;
     this.obsApp = obsApp;
+    this.scrollKey = ctx.sourcePath;
   }
 
   onload() {
-    this.render();
-  }
-
-  private render() {
-    this.containerEl.innerHTML = "";
     this.containerEl.className = "kanban-plugin-container";
-    // Re-parse directives every render so edits to source are reflected live
-    const maxHeight = parseMaxHeight(this.source);
-    const colWidth = parseColWidth(this.source);
+    this.injectStyles();
 
-    // ── Search bar ──
+    // ── Search bar — created once, never destroyed ──
     const searchWrap = div("kanban-search-wrap");
     const searchIcon = el("span", { cls: "kanban-search-icon", text: "🔍" });
     const searchInput = el("input", {
       cls: "kanban-search-input",
       attr: { type: "text", placeholder: "Search cards..." },
     }) as HTMLInputElement;
-    searchInput.value = this.searchQuery;
     const clearBtn = el("button", { cls: "kanban-search-clear", text: "×" });
-    clearBtn.style.display = this.searchQuery ? "flex" : "none";
+    clearBtn.style.display = "none";
     clearBtn.addEventListener("click", () => {
       this.searchQuery = "";
       searchInput.value = "";
       clearBtn.style.display = "none";
-      this.applySearch("", board);
+      if (this.boardEl) this.applySearch("", this.boardEl);
     });
     searchInput.addEventListener("input", () => {
       this.searchQuery = searchInput.value;
       clearBtn.style.display = this.searchQuery ? "flex" : "none";
-      this.applySearch(this.searchQuery, board);
+      if (this.boardEl) this.applySearch(this.searchQuery, this.boardEl);
     });
     searchWrap.appendChild(searchIcon);
     searchWrap.appendChild(searchInput);
     searchWrap.appendChild(clearBtn);
     this.containerEl.appendChild(searchWrap);
 
-    // Board goes inside a separate horizontally-scrollable wrapper
-    // so the search bar above it stays fixed/sticky and doesn't scroll
-    const boardScroll = div("kanban-board-scroll");
-    this.containerEl.appendChild(boardScroll);
+    // ── Board scroll container — created once, scroll position never reset ──
+    this.boardScrollEl = div("kanban-board-scroll");
+    this.containerEl.appendChild(this.boardScrollEl);
 
+    // ── Block native Obsidian context menu inside the kanban block ────────────
+    this.containerEl.addEventListener("contextmenu", (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.showBoardContextMenu(e);
+    });
+
+    this.render();
+  }
+
+  private render() {
+    // Only wipe and rebuild board contents — boardScrollEl is persistent so scroll position is preserved
+    if (!this.boardScrollEl) return;
+    this.boardScrollEl.innerHTML = "";
+
+    // Re-parse directives every render so edits to source are reflected live
+    const maxHeight = parseMaxHeight(this.source);
+    const colWidth = parseColWidth(this.source);
+
+    const boardScroll = this.boardScrollEl;
     const board = div("kanban-board");
     boardScroll.appendChild(board);
+    this.boardEl = board;
 
     for (const col of this.columns) {
       this.renderColumn(board, col, maxHeight, colWidth);
@@ -705,6 +721,15 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // Apply search state immediately after render (preserves search across re-renders)
     if (this.searchQuery) this.applySearch(this.searchQuery, board);
+
+    // Restore scroll from static registry — handles Obsidian re-mounting the instance
+    const savedScroll = _scrollRegistry.get(this.scrollKey);
+    if (savedScroll && savedScroll > 0 && this.boardScrollEl) {
+      const bsEl = this.boardScrollEl;
+      requestAnimationFrame(() => {
+        bsEl.scrollLeft = savedScroll;
+      });
+    }
 
     const addColBtn = el("button", {
       cls: "kanban-add-col-btn",
@@ -829,8 +854,6 @@ class KanbanRenderer extends MarkdownRenderChild {
 
       this.saveAndRender();
     });
-
-    this.injectStyles();
   }
 
   private renderColumn(
@@ -1200,34 +1223,79 @@ class KanbanRenderer extends MarkdownRenderChild {
     const textEl = el("span", { cls: "kanban-card-text" });
     const wikilinkTarget = extractWikilink(card.text);
     if (wikilinkTarget) {
-      // Render as clickable wikilink
-      const linkEl = el("a", { cls: "kanban-card-link", text: wikilinkTarget });
-      linkEl.title = `Open: ${wikilinkTarget}`;
-      linkEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        // Check pages folder first, then fallback to kanban folder (legacy support)
-        const pagesFolder = (() => {
+      // Resolve file — pages folder first, then legacy fallback
+      const resolveWikiFile = () => {
+        const kf = getFolderPath(this.ctx.sourcePath);
+        const sub = parsePagesFolder(this.source);
+        const pf = kf ? `${kf}/${sub}` : sub;
+        const inPages = this.obsApp.vault.getFileByPath(
+          `${pf}/${wikilinkTarget}.md`,
+        );
+        if (inPages) return inPages;
+        const legacy = kf
+          ? `${kf}/${wikilinkTarget}.md`
+          : `${wikilinkTarget}.md`;
+        return this.obsApp.vault.getFileByPath(legacy);
+      };
+
+      const fileExists = !!resolveWikiFile();
+
+      if (fileExists) {
+        // ── File exists — render as normal clickable link ──────────────────
+        const linkEl = el("a", {
+          cls: "kanban-card-link",
+          text: wikilinkTarget,
+        });
+        linkEl.title = `Open: ${wikilinkTarget}`;
+        linkEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const file = resolveWikiFile();
+          if (file) {
+            const leaf = this.obsApp.workspace.getLeaf("split");
+            leaf.openFile(file);
+          }
+        });
+        textEl.appendChild(linkEl);
+      } else {
+        // ── File does not exist — render as ghost link with + badge ────────
+        // Pill wrapper: [📄 FileName +]
+        const ghostPill = el("span", { cls: "kanban-ghost-pill" });
+        ghostPill.title = `Create page: ${wikilinkTarget}`;
+
+        const ghostIcon = el("span", { cls: "kanban-ghost-icon", text: "📄" });
+        const ghostName = el("span", {
+          cls: "kanban-ghost-name",
+          text: wikilinkTarget,
+        });
+        const ghostBadge = el("span", { cls: "kanban-ghost-badge", text: "+" });
+        ghostBadge.title = `Create: ${wikilinkTarget}`;
+
+        ghostPill.appendChild(ghostIcon);
+        ghostPill.appendChild(ghostName);
+        ghostPill.appendChild(ghostBadge);
+
+        const createPage = async (e: MouseEvent) => {
+          e.stopPropagation();
           const kf = getFolderPath(this.ctx.sourcePath);
           const sub = parsePagesFolder(this.source);
-          return kf ? `${kf}/${sub}` : sub;
-        })();
-        let file = this.obsApp.vault.getFileByPath(
-          `${pagesFolder}/${wikilinkTarget}.md`,
-        );
-        if (!file) {
-          const kanbanFolder = getFolderPath(this.ctx.sourcePath);
-          const legacy = kanbanFolder
-            ? `${kanbanFolder}/${wikilinkTarget}.md`
-            : `${wikilinkTarget}.md`;
-          file = this.obsApp.vault.getFileByPath(legacy);
-        }
-        if (file) {
-          // Open in a vertical split to the right, keeping kanban visible
-          const leaf = this.obsApp.workspace.getLeaf("split");
-          leaf.openFile(file);
-        }
-      });
-      textEl.appendChild(linkEl);
+          const pagesFolder = kf ? `${kf}/${sub}` : sub;
+          if (!this.obsApp.vault.getAbstractFileByPath(pagesFolder)) {
+            await this.obsApp.vault.createFolder(pagesFolder);
+          }
+          const filePath = `${pagesFolder}/${wikilinkTarget}.md`;
+          await this.obsApp.vault.create(filePath, `# ${wikilinkTarget}\n`);
+          const newFile = this.obsApp.vault.getFileByPath(filePath);
+          if (newFile) {
+            const leaf = this.obsApp.workspace.getLeaf("split");
+            leaf.openFile(newFile);
+          }
+          this.render();
+        };
+
+        ghostPill.addEventListener("click", createPage);
+        textEl.appendChild(ghostPill);
+      }
+
       // Render remaining tags after the link
       const afterLink = card.text.slice(card.text.indexOf("]]") + 2).trim();
       if (afterLink) {
@@ -1404,20 +1472,19 @@ class KanbanRenderer extends MarkdownRenderChild {
       }
 
       menuEl = div("kanban-card-dropdown");
-      const isWikilink = !!extractWikilink(card.text);
+      const wikilinkText = extractWikilink(card.text);
+      const isWikilink = !!wikilinkText;
+      const linkedFileExists = isWikilink && !!getLinkedFile();
 
       const mkItem = (icon: string, label: string, cls = "") => {
         const item = div("kanban-dropdown-item" + (cls ? " " + cls : ""));
         item.innerHTML = `<span class="kanban-dropdown-icon">${icon}</span><span>${label}</span>`;
         return item;
       };
-      const mkSep = () => {
-        const s = div("kanban-dropdown-sep");
-        return s;
-      };
+      const mkSep = () => div("kanban-dropdown-sep");
 
-      if (isWikilink) {
-        // ── Open group ──
+      if (isWikilink && linkedFileExists) {
+        // ── Wikilink card — file EXISTS ──
         const tabItem = mkItem("📂", "Open in New Tab");
         tabItem.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1441,13 +1508,52 @@ class KanbanRenderer extends MarkdownRenderChild {
 
         menuEl.appendChild(mkSep());
 
-        // ── Page actions ──
         const renameItem = mkItem("✏️", "Rename");
         renameItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doRename();
         });
         menuEl.appendChild(renameItem);
+
+        const delItem = mkItem("🗑️", "Delete", "kanban-dropdown-danger");
+        delItem.addEventListener("click", (e) => {
+          e.stopPropagation();
+          doDelete();
+        });
+        menuEl.appendChild(delItem);
+      } else if (isWikilink && !linkedFileExists) {
+        // ── Wikilink card — file DOES NOT EXIST ──
+        const createItem = mkItem("📄", "Create Page");
+        createItem.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeMenu();
+          const kf = getFolderPath(this.ctx.sourcePath);
+          const sub = parsePagesFolder(this.source);
+          const pagesFolder = kf ? `${kf}/${sub}` : sub;
+          (async () => {
+            if (!this.obsApp.vault.getAbstractFileByPath(pagesFolder)) {
+              await this.obsApp.vault.createFolder(pagesFolder);
+            }
+            const filePath = `${pagesFolder}/${wikilinkText}.md`;
+            await this.obsApp.vault.create(filePath, `# ${wikilinkText}\n`);
+            const newFile = this.obsApp.vault.getFileByPath(filePath);
+            if (newFile) {
+              const leaf = this.obsApp.workspace.getLeaf("split");
+              leaf.openFile(newFile);
+            }
+            this.render();
+          })();
+        });
+        menuEl.appendChild(createItem);
+
+        menuEl.appendChild(mkSep());
+
+        const editItem = mkItem("✏️", "Edit");
+        editItem.addEventListener("click", (e) => {
+          e.stopPropagation();
+          doEdit();
+        });
+        menuEl.appendChild(editItem);
 
         const delItem = mkItem("🗑️", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
@@ -1649,7 +1755,211 @@ class KanbanRenderer extends MarkdownRenderChild {
     this.saveAndRender();
   }
 
+  private showBoardContextMenu(e: MouseEvent) {
+    // Remove any existing context menu
+    document.querySelector(".kanban-ctx-menu")?.remove();
+
+    const menu = document.createElement("div");
+    menu.className = "kanban-ctx-menu";
+
+    const mkItem = (icon: string, label: string, cls = "") => {
+      const item = document.createElement("div");
+      item.className = "kanban-ctx-item" + (cls ? " " + cls : "");
+      item.innerHTML = `<span class="kanban-ctx-icon">${icon}</span><span>${label}</span>`;
+      return item;
+    };
+    const mkSep = () => {
+      const s = document.createElement("div");
+      s.className = "kanban-ctx-sep";
+      return s;
+    };
+
+    // ── Add Column ────────────────────────────────────────────────────────────
+    const addColItem = mkItem("➕", "Add Column");
+    addColItem.addEventListener("click", async () => {
+      menu.remove();
+      const addColBtn = this.boardScrollEl?.querySelector<HTMLElement>(
+        ".kanban-add-col-btn",
+      );
+      const anchor = addColBtn ?? this.containerEl;
+      const name = await kanbanPrompt(
+        "Column name:",
+        anchor as HTMLElement,
+        "e.g. In Progress",
+        "Create",
+      );
+      if (!name) return;
+      const newParsed = parseBgColor(name.trim());
+      this.columns.push({
+        id: generateId(),
+        title: name.trim(),
+        displayTitle: newParsed.displayTitle,
+        bgColor: newParsed.bgColor,
+        cards: [],
+        trailingRaw: [],
+      });
+      this.saveAndRender();
+    });
+    menu.appendChild(addColItem);
+
+    menu.appendChild(mkSep());
+
+    // ── Edit Directives ───────────────────────────────────────────────────────
+    const editDirItem = mkItem("⚙️", "Edit Directives");
+    editDirItem.addEventListener("click", () => {
+      menu.remove();
+      this.showDirectivesModal();
+    });
+    menu.appendChild(editDirItem);
+
+    menu.appendChild(mkSep());
+
+    // ── Copy Source ───────────────────────────────────────────────────────────
+    const copyItem = mkItem("📋", "Copy Board Source");
+    copyItem.addEventListener("click", () => {
+      menu.remove();
+      navigator.clipboard
+        .writeText("```kanban\n" + this.source + "\n```")
+        .catch(() => {});
+    });
+    menu.appendChild(copyItem);
+
+    // Position and show
+    menu.style.position = "fixed";
+    menu.style.left = e.clientX + "px";
+    menu.style.top = e.clientY + "px";
+    document.body.appendChild(menu);
+
+    // Clamp to viewport
+    requestAnimationFrame(() => {
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth)
+        menu.style.left = e.clientX - rect.width + "px";
+      if (rect.bottom > window.innerHeight)
+        menu.style.top = e.clientY - rect.height + "px";
+    });
+
+    // Dismiss on outside click
+    const dismiss = (ev: MouseEvent) => {
+      if (!menu.contains(ev.target as Node)) {
+        menu.remove();
+        document.removeEventListener("click", dismiss, true);
+      }
+    };
+    setTimeout(() => document.addEventListener("click", dismiss, true), 0);
+  }
+
+  private showDirectivesModal() {
+    // Parse current values
+    const curMaxHeight = parseMaxHeight(this.source);
+    const curColWidth = parseColWidth(this.source);
+    const curPagesFolder = parsePagesFolder(this.source);
+
+    // Build modal
+    const backdrop = document.createElement("div");
+    backdrop.className = "kanban-modal-backdrop";
+
+    const modal = document.createElement("div");
+    modal.className = "kanban-modal";
+    modal.style.minWidth = "280px";
+    modal.style.maxWidth = "360px";
+
+    const title = document.createElement("p");
+    title.className = "kanban-modal-msg";
+    title.style.fontWeight = "600";
+    title.style.fontSize = "1em";
+    title.textContent = "⚙️ Board Directives";
+    modal.appendChild(title);
+
+    const mkField = (label: string, value: string, placeholder: string) => {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;flex-direction:column;gap:4px";
+      const lbl = document.createElement("label");
+      lbl.textContent = label;
+      lbl.style.cssText =
+        "font-size:.8em;color:var(--text-muted);font-weight:500";
+      const inp = document.createElement("input");
+      inp.className = "kanban-modal-input";
+      inp.value = value;
+      inp.placeholder = placeholder;
+      wrap.appendChild(lbl);
+      wrap.appendChild(inp);
+      return { wrap, inp };
+    };
+
+    const { wrap: mhWrap, inp: mhInp } = mkField(
+      "Max Height",
+      curMaxHeight,
+      "e.g. 400px",
+    );
+    const { wrap: cwWrap, inp: cwInp } = mkField(
+      "Column Width",
+      curColWidth,
+      "e.g. 240px",
+    );
+    const { wrap: pfWrap, inp: pfInp } = mkField(
+      "Pages Folder",
+      curPagesFolder,
+      "e.g. _kanban-notes",
+    );
+
+    modal.appendChild(mhWrap);
+    modal.appendChild(cwWrap);
+    modal.appendChild(pfWrap);
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "kanban-modal-btns";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "kanban-modal-btn-cancel";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => backdrop.remove());
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "kanban-modal-btn-confirm";
+    saveBtn.textContent = "Apply";
+    saveBtn.addEventListener("click", () => {
+      backdrop.remove();
+      // Strip all existing directive tokens from source, rebuild header
+      let newSource = this.source
+        .split("\n")
+        .filter(
+          (l: string) =>
+            !MAX_HEIGHT_RE.test(l.trim()) &&
+            !COL_WIDTH_RE.test(l.trim()) &&
+            !PAGES_FOLDER_RE.test(l.trim()) &&
+            !VERSION_RE.test(l.trim()),
+        )
+        .join("\n");
+
+      const mh = mhInp.value.trim() || DEFAULT_MAX_HEIGHT;
+      const cw = cwInp.value.trim() || DEFAULT_COL_WIDTH;
+      const pf = pfInp.value.trim() || DEFAULT_PAGES_FOLDER;
+      const newHeader = `[v:${CURRENT_FORMAT_VERSION}][maxHeight:${mh}][columnWidth:${cw}][pagesFolder:${pf}]`;
+      newSource = newHeader + "\n" + newSource.trimStart();
+
+      this.source = newSource;
+      this.columns = parseKanban(newSource);
+      this.saveAndRender();
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+    modal.appendChild(btnRow);
+    backdrop.appendChild(modal);
+
+    backdrop.addEventListener("click", (ev) => {
+      if (ev.target === backdrop) backdrop.remove();
+    });
+    document.body.appendChild(backdrop);
+    mhInp.focus();
+  }
+
   private async saveAndRender() {
+    // Save scroll position to static registry BEFORE vault.modify triggers re-mount
+    if (this.boardScrollEl) {
+      _scrollRegistry.set(this.scrollKey, this.boardScrollEl.scrollLeft);
+    }
     // Preserve the [maxHeight:...] header tag from the current source
     const header = extractSourceHeader(this.source);
     const newSource = serializeKanban(this.columns, header);
@@ -1739,7 +2049,19 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-search-empty{text-align:center;color:var(--text-muted);font-size:.8em;padding:10px 0;font-style:italic}
       .kanban-card-link{color:var(--link-color, var(--interactive-accent));text-decoration:underline;cursor:pointer;font-size:inherit;background:none;border:none;padding:0}
       .kanban-card-link:hover{color:var(--link-color-hover, var(--interactive-accent-hover));text-decoration:underline}
-      .kanban-modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;border-radius:10px}
+      .kanban-ghost-pill{display:inline-flex;align-items:center;gap:4px;cursor:pointer;border-radius:6px;padding:2px 4px 2px 2px;transition:background .15s;max-width:100%;overflow:hidden}
+      .kanban-ghost-pill:hover{background:rgba(0,0,0,.04)}
+      .kanban-ghost-icon{font-size:.78em;opacity:.5;flex-shrink:0;line-height:1}
+      .kanban-ghost-name{color:var(--link-color,var(--interactive-accent));font-size:.88em;font-weight:500;text-decoration:underline;text-decoration-style:dashed;text-underline-offset:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .kanban-ghost-badge{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--interactive-accent);color:#fff;font-size:11px;font-weight:700;line-height:1;flex-shrink:0;transition:transform .15s,opacity .15s;opacity:.9}
+      .kanban-ghost-pill:hover .kanban-ghost-badge{opacity:1;transform:scale(1.1)}
+      .kanban-ctx-menu{background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:8px;padding:4px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:99999}
+      .kanban-ctx-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:.88em;color:var(--text-normal);transition:background .1s}
+      .kanban-ctx-item:hover{background:var(--background-modifier-hover)}
+      .kanban-ctx-item.kanban-ctx-danger{color:#e74c3c}
+      .kanban-ctx-icon{font-size:.95em;width:18px;text-align:center;flex-shrink:0}
+      .kanban-ctx-sep{height:1px;background:var(--background-modifier-border);margin:4px 8px}
+      .kanban-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99999}
       .kanban-modal{background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;padding:20px 22px;min-width:220px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:16px}
       .kanban-modal-msg{margin:0;font-size:.9em;color:var(--text-normal);line-height:1.5}
       .kanban-modal-btns{display:flex;gap:8px;justify-content:flex-end}
