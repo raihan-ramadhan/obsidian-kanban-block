@@ -757,43 +757,45 @@ class KanbanRenderer extends MarkdownRenderChild {
     });
     board.appendChild(addColBtn);
 
-    // ── Column drag-over: show vertical drop indicator between columns ────────
+    // ── Column live reorder on dragover ─────────────────────────────────────
     board.addEventListener("dragover", (e) => {
       if (!this.draggingColId) return;
       e.preventDefault();
+      e.dataTransfer!.dropEffect = "move";
 
-      // Use ALL columns (including dragging one) so DOM positions stay accurate
+      const draggingEl = board.querySelector<HTMLElement>(
+        `[data-col-id="${this.draggingColId}"]`,
+      );
+      if (!draggingEl) return;
+
       const cols = Array.from(
         board.querySelectorAll<HTMLElement>(".kanban-column"),
-      );
+      ).filter((c) => c !== draggingEl);
+
       let insertBefore: HTMLElement | null = null;
       for (const c of cols) {
         const rect = c.getBoundingClientRect();
-        if (rect.width === 0) continue; // skip hidden
         if (e.clientX < rect.left + rect.width / 2) {
           insertBefore = c;
           break;
         }
       }
 
-      board
-        .querySelectorAll<HTMLElement>(".kanban-col-drop-indicator")
-        .forEach((el) => el.remove());
-
-      const indicator = div("kanban-col-drop-indicator");
+      // Live reorder: move dragging column in DOM immediately
       if (insertBefore) {
-        board.insertBefore(indicator, insertBefore);
+        if (draggingEl.nextElementSibling !== insertBefore) {
+          board.insertBefore(draggingEl, insertBefore);
+        }
       } else {
-        board.insertBefore(indicator, addColBtn);
+        // Move to end (before addColBtn)
+        if (draggingEl.nextElementSibling !== addColBtn) {
+          board.insertBefore(draggingEl, addColBtn);
+        }
       }
     });
 
     board.addEventListener("dragleave", (e) => {
-      if (!board.contains(e.relatedTarget as Node)) {
-        board
-          .querySelectorAll<HTMLElement>(".kanban-col-drop-indicator")
-          .forEach((el) => el.remove());
-      }
+      // Nothing to clean up — no drop indicator used
     });
 
     board.addEventListener("drop", (e) => {
@@ -801,56 +803,15 @@ class KanbanRenderer extends MarkdownRenderChild {
       if (!data.startsWith("col:")) return;
       e.preventDefault();
 
-      const draggedTitle = data.slice(4);
-
-      // Snapshot all column DOM elements (in current DOM order) BEFORE removing indicator
+      // DOM is already in correct order from live reorder during dragover
+      // Just sync this.columns to match current DOM order
       const allColEls = Array.from(
         board.querySelectorAll<HTMLElement>(".kanban-column"),
       );
-      const indicator = board.querySelector<HTMLElement>(
-        ".kanban-col-drop-indicator",
-      );
-      // Find the index in the DOM where indicator sits among column elements
-      // by checking which column comes right after the indicator
-      let insertBeforeEl: HTMLElement | null = null;
-      if (indicator) {
-        let node = indicator.nextElementSibling as HTMLElement | null;
-        while (node) {
-          if (node.classList.contains("kanban-column")) {
-            insertBeforeEl = node;
-            break;
-          }
-          node = node.nextElementSibling as HTMLElement | null;
-        }
-      }
-      board
-        .querySelectorAll<HTMLElement>(".kanban-col-drop-indicator")
-        .forEach((el) => el.remove());
-
-      // Map DOM order to this.columns order using colId
-      // allColEls is the ground truth for current visual order
-      const domOrder = allColEls.map((el) => el.dataset.colId ?? "");
-      // Build reordered array: remove dragged, insert at target position
-      const fromDomIdx = domOrder.indexOf(draggedTitle); // draggedTitle is now col.id
-      if (fromDomIdx < 0) return;
-
-      // Target: index of insertBeforeEl in DOM, or end if null
-      const insertBeforeTitle = insertBeforeEl?.dataset.colId ?? null;
-      let toDomIdx = insertBeforeTitle
-        ? domOrder.indexOf(insertBeforeTitle)
-        : domOrder.length;
-      if (toDomIdx < 0) toDomIdx = domOrder.length;
-
-      // Reorder this.columns to match new DOM order
-      // 1. Build new order from domOrder
-      const newOrder = [...domOrder];
-      newOrder.splice(fromDomIdx, 1);
-      if (toDomIdx > fromDomIdx) toDomIdx--; // adjust after removal
-      newOrder.splice(toDomIdx, 0, draggedTitle);
-
-      // 2. Remap this.columns to new order
       const colMap = new Map(this.columns.map((c) => [c.id, c]));
-      this.columns = newOrder.map((t) => colMap.get(t)!).filter(Boolean);
+      this.columns = allColEls
+        .map((el) => colMap.get(el.dataset.colId ?? ""))
+        .filter(Boolean) as KanbanColumn[];
 
       this.saveAndRender();
     });
@@ -887,7 +848,72 @@ class KanbanRenderer extends MarkdownRenderChild {
     if (col.bgColor) {
       titleEl.style.color = adaptiveForeground(col.bgColor);
     }
-    titleEl.addEventListener("dblclick", () => {
+    // pointer-events:none so drag events go straight to header (the draggable parent)
+    // dblclick is handled on header instead (see below)
+    titleEl.style.pointerEvents = "none";
+
+    // dblclick handled on header — titleEl has pointer-events:none
+
+    const badge = el("span", {
+      cls: "kanban-count-badge",
+      text: String(col.cards.length),
+    });
+    badge.style.pointerEvents = "none";
+
+    // ── + Add Card button in header ──
+    const headerAddBtn = el("button", {
+      cls: "kanban-header-add-btn",
+      text: "+",
+    });
+    headerAddBtn.title = "Add card";
+
+    // ── Header drag — entire header is drag handle ──────────────────────────
+    // header.draggable = true permanently so browser can start drag from any child.
+    // We distinguish click vs drag in dragstart by checking mouse travel distance.
+    header.draggable = true;
+    let headerMouseDownX = 0;
+    let headerMouseDownY = 0;
+    let headerDragStarted = false;
+
+    // Track mousedown position — works even when target is a child span
+    header.addEventListener("mousedown", (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("button,input,a")) return;
+      headerMouseDownX = e.clientX;
+      headerMouseDownY = e.clientY;
+      headerDragStarted = false;
+    });
+
+    header.addEventListener("dragstart", (e: DragEvent) => {
+      // Ignore if started from a button/input/link
+      if ((e.target as HTMLElement).closest("button,input,a")) {
+        e.preventDefault();
+        return;
+      }
+      headerDragStarted = true;
+      this.draggingColId = col.id;
+      colEl.classList.add("kanban-col-dragging");
+      e.dataTransfer!.effectAllowed = "move";
+      e.dataTransfer!.setData("text/plain", "col:" + col.id);
+      // Transparent drag image — column stays visible during live reorder
+      const ghost = document.createElement("div");
+      ghost.style.cssText =
+        "position:fixed;top:-9999px;width:1px;height:1px;opacity:0";
+      document.body.appendChild(ghost);
+      e.dataTransfer!.setDragImage(ghost, 0, 0);
+      setTimeout(() => ghost.remove(), 0);
+    });
+
+    header.addEventListener("dragend", () => {
+      header.draggable = true;
+      headerDragStarted = false;
+      colEl.classList.remove("kanban-col-dragging");
+      this.draggingColId = null;
+    });
+
+    // ── Double-click on header → inline rename (title has pointer-events:none) ─
+    header.addEventListener("dblclick", (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("button,input,a")) return;
+      if (headerDragStarted) return; // don't rename after a drag
       const inputWrap = div("kanban-inline-wrap");
       const input = el("input", {
         cls: "kanban-inline-input",
@@ -899,20 +925,19 @@ class KanbanRenderer extends MarkdownRenderChild {
       errorEl.style.display = "none";
       inputWrap.appendChild(input);
       inputWrap.appendChild(errorEl);
-      header.replaceChild(inputWrap, titleEl);
+      header.replaceChild(titleEl, titleEl); // no-op to keep DOM stable
+      // Replace title span with input wrap
+      titleEl.replaceWith(inputWrap);
       input.focus();
       input.select();
-
       const finishRename = () => {
         const newName = input.value.trim();
         if (!newName) {
-          // Show inline error, stay in edit mode
           errorEl.style.display = "block";
           input.classList.add("kanban-modal-input-error");
           input.focus();
           return;
         }
-        // Preserve existing [bg:...] tag when renaming
         const bgTag = col.title.match(BG_TAG_RE);
         col.title = bgTag ? `${newName} ${bgTag[0]}` : newName;
         const parsed = parseBgColor(col.title);
@@ -927,50 +952,20 @@ class KanbanRenderer extends MarkdownRenderChild {
         }
       });
       input.addEventListener("blur", finishRename);
-      input.addEventListener("keydown", (e: KeyboardEvent) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
+      input.addEventListener("keydown", (ev: KeyboardEvent) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
           finishRename();
         }
-        if (e.key === "Escape") this.render();
+        if (ev.key === "Escape") this.render();
       });
     });
 
-    const badge = el("span", {
-      cls: "kanban-count-badge",
-      text: String(col.cards.length),
-    });
+    // ── Column options button (⋯) — replaces grip ────────────────────────────
+    const gripBtn = el("button", { cls: "kanban-grip-btn", text: "⋯" });
+    gripBtn.title = "Column options";
 
-    // ── + Add Card button in header ──
-    const headerAddBtn = el("button", {
-      cls: "kanban-header-add-btn",
-      text: "+",
-    });
-    headerAddBtn.title = "Add card";
-
-    // ── Grip / menu button ──
-    const gripBtn = el("button", { cls: "kanban-grip-btn", text: "⠿" });
-    gripBtn.title = "Drag to reorder · Click for options";
-    gripBtn.draggable = true;
-
-    // Grip drag events — drag the whole column
-    gripBtn.addEventListener("dragstart", (e) => {
-      e.stopPropagation();
-      this.draggingColId = col.id;
-      colEl.classList.add("kanban-col-dragging");
-      e.dataTransfer!.effectAllowed = "move";
-      e.dataTransfer!.setData("text/plain", "col:" + col.id);
-    });
-    gripBtn.addEventListener("dragend", () => {
-      colEl.classList.remove("kanban-col-dragging");
-      this.draggingColId = null;
-      // Remove all column drop indicators
-      document
-        .querySelectorAll<HTMLElement>(".kanban-col-drop-indicator")
-        .forEach((el) => el.remove());
-    });
-
-    // Grip click — open column dropdown menu
+    // ── Column dropdown menu ──────────────────────────────────────────────────
     let colMenuEl: HTMLElement | null = null;
     const closeColMenu = () => {
       colMenuEl?.remove();
@@ -1999,16 +1994,15 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-plugin-container{display:flex;flex-direction:column;padding:8px 0;gap:0;position:relative}
       .kanban-board-scroll{overflow-x:auto;width:100%}.kanban-board{display:flex;gap:14px;align-items:flex-start;padding:4px 2px 12px;min-width:max-content}
       .kanban-column{background:var(--background-secondary);border-radius:10px;display:flex;flex-direction:column;padding:10px;gap:8px;border:1px solid var(--background-modifier-border);overflow:hidden}
-      .kanban-column-header{display:flex;align-items:center;gap:4px;padding-bottom:6px;border-bottom:2px solid var(--interactive-accent)}
+      .kanban-column-header{display:flex;align-items:center;gap:4px;padding-bottom:6px;border-bottom:2px solid var(--interactive-accent);cursor:grab;user-select:none}
       .kanban-column-title{font-weight:700;font-size:.9em;flex:1;cursor:pointer;color:var(--text-normal);user-select:none}
       .kanban-count-badge{background:var(--interactive-accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:.75em;font-weight:700}
       .kanban-header-add-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1em;padding:0 4px;border-radius:4px;line-height:1;font-weight:300}
       .kanban-header-add-btn:hover{color:var(--interactive-accent);background:var(--background-modifier-hover)}
-      .kanban-grip-btn{background:transparent;border:none;color:var(--text-muted);cursor:grab;font-size:1em;padding:0 4px;border-radius:4px;line-height:1;user-select:none}
+      .kanban-column-header:active{cursor:grabbing}
+      .kanban-col-dragging{opacity:.5;outline:2px dashed var(--interactive-accent);outline-offset:2px;border-radius:10px}
+      .kanban-grip-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2em;padding:0 4px;border-radius:4px;line-height:1;letter-spacing:1px}
       .kanban-grip-btn:hover{color:var(--text-normal);background:var(--background-modifier-hover)}
-      .kanban-grip-btn:active{cursor:grabbing}
-      .kanban-col-dragging{opacity:.4}
-      .kanban-col-drop-indicator{width:3px;min-height:60px;border-radius:3px;background:var(--interactive-accent);box-shadow:0 0 6px var(--interactive-accent);flex-shrink:0;align-self:stretch;pointer-events:none}
       .kanban-cards-wrapper{position:relative;border-radius:6px}.kanban-cards-wrapper.kanban-cards-shadow::after{content:'';position:absolute;bottom:0;left:0;right:0;height:32px;border-radius:0 0 6px 6px;background:linear-gradient(to bottom,transparent,rgba(0,0,0,0.13));pointer-events:none;z-index:1}.kanban-cards{display:flex;flex-direction:column;gap:7px;min-height:40px;border-radius:6px;padding:2px;transition:background .15s}.kanban-cards::-webkit-scrollbar{display:none}.kanban-cards{scrollbar-width:none;-ms-overflow-style:none}
       .kanban-drop-indicator{display:none;height:3px;border-radius:3px;background:var(--interactive-accent);margin:2px 0;pointer-events:none;box-shadow:0 0 6px var(--interactive-accent);transition:none}
       .kanban-card{background:var(--background-primary);border-radius:7px;padding:8px 10px;cursor:grab;border:1px solid var(--background-modifier-border);transition:box-shadow .15s;position:relative}
