@@ -739,10 +739,11 @@ class KanbanRenderer extends MarkdownRenderChild {
       });
     }
 
-    const addColBtn = el("button", {
-      cls: "kanban-add-col-btn",
-      text: "+ Add Column",
-    });
+    const addColBtn = el("button", { cls: "kanban-add-col-btn" });
+    const addColIcon = el("span", { cls: "kanban-add-col-icon" });
+    si(addColIcon, "plus");
+    addColBtn.appendChild(addColIcon);
+    addColBtn.appendChild(el("span", { text: "Add Card" }));
     addColBtn.addEventListener("click", async () => {
       const name = await kanbanPrompt(
         "Column name:",
@@ -1271,10 +1272,11 @@ class KanbanRenderer extends MarkdownRenderChild {
       this.showAddCardInput(cardsEl, col);
     });
 
-    const addCardBtn = el("button", {
-      cls: "kanban-add-card-btn",
-      text: "+ Add Card",
-    });
+    const addCardBtn = el("button", { cls: "kanban-add-card-btn" });
+    const addCardIcon = el("span", { cls: "kanban-add-card-icon" });
+    si(addCardIcon, "plus");
+    addCardBtn.appendChild(addCardIcon);
+    addCardBtn.appendChild(el("span", { text: "Add Card" }));
     addCardBtn.addEventListener("click", () =>
       this.showAddCardInput(cardsEl, col),
     );
@@ -2144,10 +2146,12 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-dropdown-danger:hover{background:rgba(231,76,60,.1)}
       .kanban-dropdown-sep{height:1px;background:var(--background-modifier-border);margin:4px 0}
       .kanban-dropdown-icon{display:flex;align-items:center;justify-content:center;width:16px;height:16px;flex-shrink:0}.kanban-dropdown-icon svg{width:14px;height:14px}
-      .kanban-add-card-btn{background:transparent;border:1px dashed var(--background-modifier-border);color:var(--text-muted);border-radius:7px;padding:6px;cursor:pointer;width:100%;font-size:.82em}
-      .kanban-add-card-btn:hover{background:var(--background-modifier-hover);color:var(--text-normal)}
-      .kanban-add-col-btn{background:var(--background-secondary);border:2px dashed var(--background-modifier-border);color:var(--text-muted);border-radius:10px;padding:10px 18px;cursor:pointer;font-size:.85em;align-self:flex-start;white-space:nowrap}
-      .kanban-add-col-btn:hover{background:var(--background-modifier-hover);color:var(--text-normal)}
+      .kanban-add-card-btn{background:var(--background-secondary);border:1px solid var(--background-modifier-border);color:var(--text-muted);border-radius:7px;padding:6px;cursor:pointer;width:100%;font-size:.82em;display:flex;align-items:center;justify-content:center;gap:5px;transition:opacity .15s ease,color .15s ease;box-shadow:none!important}
+      .kanban-add-card-btn:hover{opacity:.85;color:var(--text-normal)}
+      .kanban-add-card-icon{display:flex;align-items:center;flex-shrink:0}.kanban-add-card-icon svg{width:13px;height:13px}
+      .kanban-add-col-btn{background:var(--background-secondary);border:2px solid var(--background-modifier-border);color:var(--text-muted);border-radius:10px;padding:10px 18px;cursor:pointer;font-size:.85em;align-self:flex-start;white-space:nowrap;display:flex;align-items:center;gap:6px;transition:background .15s ease,border-color .15s ease,color .15s ease;box-shadow:none!important}
+      .kanban-add-col-btn:hover{background:var(--background-secondary)!important;opacity:.7;border-color:var(--text-muted)!important;color:var(--text-normal)!important}
+      .kanban-add-col-icon{display:flex;align-items:center;flex-shrink:0}.kanban-add-col-icon svg{width:14px;height:14px}
       .kanban-add-input-wrapper{display:flex;flex-direction:column;gap:6px}
       .kanban-add-card-input,.kanban-card-edit-input{width:100%;padding:7px;border-radius:6px;border:1px solid var(--interactive-accent);background:var(--background-primary);color:var(--text-normal);font-size:.85em;resize:vertical;min-height:60px;box-sizing:border-box}
       .kanban-add-input-actions{display:flex;gap:6px}
