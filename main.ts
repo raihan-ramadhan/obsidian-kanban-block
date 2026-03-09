@@ -1184,12 +1184,21 @@ class KanbanRenderer extends MarkdownRenderChild {
         if (!colMenuEl?.contains(ev.target as Node)) {
           closeColMenu();
           document.removeEventListener("mousedown", onOutside, true);
+          document.removeEventListener("keydown", onEsc, true);
         }
       };
-      setTimeout(
-        () => document.addEventListener("mousedown", onOutside, true),
-        0,
-      );
+      const onEsc = (ev: KeyboardEvent) => {
+        if (ev.key === "Escape") {
+          ev.stopPropagation();
+          closeColMenu();
+          document.removeEventListener("mousedown", onOutside, true);
+          document.removeEventListener("keydown", onEsc, true);
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener("mousedown", onOutside, true);
+        document.addEventListener("keydown", onEsc, true);
+      }, 0);
     });
 
     const headerSpacer = div("kanban-header-spacer");
@@ -1769,9 +1778,21 @@ class KanbanRenderer extends MarkdownRenderChild {
         if (!menuEl?.contains(ev.target as Node)) {
           closeMenu();
           document.removeEventListener("click", onOutside, true);
+          document.removeEventListener("keydown", onEsc, true);
         }
       };
-      setTimeout(() => document.addEventListener("click", onOutside, true), 0);
+      const onEsc = (ev: KeyboardEvent) => {
+        if (ev.key === "Escape") {
+          ev.stopPropagation();
+          closeMenu();
+          document.removeEventListener("click", onOutside, true);
+          document.removeEventListener("keydown", onEsc, true);
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener("click", onOutside, true);
+        document.addEventListener("keydown", onEsc, true);
+      }, 0);
     };
 
     menuBtn.addEventListener("click", openMenu);
