@@ -777,6 +777,11 @@ class KanbanRenderer extends MarkdownRenderChild {
   private boardScrollEl: HTMLElement | null = null;
   private boardEl: HTMLElement | null = null;
   private scrollKey: string = "";
+  private flairObserver: MutationObserver | null = null;
+
+  onunload() {
+    this.flairObserver?.disconnect();
+  }
   constructor(
     containerEl: HTMLElement,
     source: string,
@@ -2655,6 +2660,10 @@ class KanbanRenderer extends MarkdownRenderChild {
     style.id = styleId;
     style.textContent = `
       .kanban-plugin-container{display:flex;flex-direction:column;padding:8px 0;gap:0;position:relative}
+      .cm-lang-kanban{outline:none!important;border:none!important;box-shadow:none!important}
+      .cm-lang-kanban:hover{outline:none!important;border:none!important;box-shadow:none!important}
+      .cm-lang-kanban:focus{outline:none!important;border:none!important;box-shadow:none!important}
+      .cm-lang-kanban .edit-block-button{display:none!important}
       .kanban-board-scroll{overflow-x:auto;width:100%}.kanban-board{display:flex;gap:14px;align-items:flex-start;padding:4px 2px 12px;min-width:max-content}
       .kanban-column{background:var(--background-secondary);border-radius:10px;display:flex;flex-direction:column;padding:10px;gap:8px;border:1px solid var(--background-modifier-border);overflow:visible;position:relative}
       .kanban-column-header{display:flex;align-items:center;gap:4px;padding-bottom:6px;border-bottom:2px solid var(--interactive-accent);cursor:grab;user-select:none}
