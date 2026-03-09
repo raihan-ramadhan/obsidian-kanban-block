@@ -1380,7 +1380,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         // ── File does not exist — render as ghost link with + badge ────────
         // Pill wrapper: [📄 FileName +]
         const ghostPill = el("span", { cls: "kanban-ghost-pill" });
-        ghostPill.title = `Create page: ${wikilinkTarget}`;
+        ghostPill.title = `Create note: ${wikilinkTarget}`;
 
         const ghostIcon = el("span", { cls: "kanban-ghost-icon" });
         si(ghostIcon, "file-plus");
@@ -1521,7 +1521,7 @@ class KanbanRenderer extends MarkdownRenderChild {
           }
         }
 
-        let msg = `Delete card and its linked page "${wt}.md"?`;
+        let msg = `Delete card and its linked note "${wt}.md"?`;
         if (otherRefs.length > 0) {
           const lines = otherRefs
             .map((r) => `  • "${r.colTitle}" → ${r.cardText}`)
@@ -1598,10 +1598,10 @@ class KanbanRenderer extends MarkdownRenderChild {
       const folder = getFolderPath(linkedFile.path); // keep file in its current folder
 
       const newName = await kanbanPrompt(
-        "Rename page:",
+        "Rename note:",
         menuBtn,
         currentName,
-        "Rename",
+        "Rename...",
         (value) => {
           if (value === currentName) return null; // same name is fine — will no-op below
           const newPath = folder ? `${folder}/${value}.md` : `${value}.md`;
@@ -1690,7 +1690,7 @@ class KanbanRenderer extends MarkdownRenderChild {
 
         menuEl.appendChild(mkSep());
 
-        const renameItem = mkItem("pencil", "Rename");
+        const renameItem = mkItem("pencil", "Rename...");
         renameItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doRename();
@@ -1705,7 +1705,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         menuEl.appendChild(delItem);
       } else if (isWikilink && !linkedFileExists) {
         // ── Wikilink card — file DOES NOT EXIST ──
-        const createItem = mkItem("file-plus", "Create Page");
+        const createItem = mkItem("file-plus", "Create Note");
         createItem.addEventListener("click", (e) => {
           e.stopPropagation();
           closeMenu();
@@ -1752,7 +1752,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         });
         menuEl.appendChild(editItem);
 
-        const pageItem = mkItem("file-plus", "Convert to Page");
+        const pageItem = mkItem("file-plus", "Convert to Note");
         pageItem.addEventListener("click", (e) => {
           e.stopPropagation();
           doConvertToPage();
@@ -1799,7 +1799,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     const isWikilinkCard = !!extractWikilink(card.text);
     const quickEditBtn = el("button", { cls: "kanban-card-quick-edit-btn" });
     si(quickEditBtn, "pencil");
-    quickEditBtn.title = isWikilinkCard ? "Rename page" : "Edit card";
+    quickEditBtn.title = isWikilinkCard ? "Rename note..." : "Edit card";
     quickEditBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (isWikilinkCard) {
