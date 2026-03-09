@@ -873,6 +873,12 @@ class KanbanRenderer extends MarkdownRenderChild {
     headerAddBtn.title = "Add card";
     si(headerAddBtn, "plus");
 
+    // Apply adaptive foreground to all header icon buttons when column has bgColor
+    if (col.bgColor) {
+      const fg = adaptiveForeground(col.bgColor);
+      headerAddBtn.style.setProperty("color", fg, "important");
+    }
+
     // ── Header drag — entire header is drag handle ──────────────────────────
     // header.draggable = true permanently so browser can start drag from any child.
     // We distinguish click vs drag in dragstart by checking mouse travel distance.
@@ -916,61 +922,21 @@ class KanbanRenderer extends MarkdownRenderChild {
       this.draggingColId = null;
     });
 
-    // ── Double-click on header → inline rename (title has pointer-events:none) ─
+    // ── Double-click on header → rename panel ───────────────────────────────
     header.addEventListener("dblclick", (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest("button,input,a")) return;
-      if (headerDragStarted) return; // don't rename after a drag
-      const inputWrap = div("kanban-inline-wrap");
-      const input = el("input", {
-        cls: "kanban-inline-input",
-      }) as HTMLInputElement;
-      input.value = col.displayTitle;
-      const errorEl = document.createElement("span");
-      errorEl.className = "kanban-inline-error";
-      errorEl.textContent = "Title cannot be empty";
-      errorEl.style.display = "none";
-      inputWrap.appendChild(input);
-      inputWrap.appendChild(errorEl);
-      header.replaceChild(titleEl, titleEl); // no-op to keep DOM stable
-      // Replace title span with input wrap
-      titleEl.replaceWith(inputWrap);
-      input.focus();
-      input.select();
-      const finishRename = () => {
-        const newName = input.value.trim();
-        if (!newName) {
-          errorEl.style.display = "block";
-          input.classList.add("kanban-modal-input-error");
-          input.focus();
-          return;
-        }
-        const bgTag = col.title.match(BG_TAG_RE);
-        col.title = bgTag ? `${newName} ${bgTag[0]}` : newName;
-        const parsed = parseBgColor(col.title);
-        col.displayTitle = parsed.displayTitle || "Untitled";
-        col.bgColor = parsed.bgColor;
-        this.saveAndRender();
-      };
-      input.addEventListener("input", () => {
-        if (input.value.trim()) {
-          errorEl.style.display = "none";
-          input.classList.remove("kanban-modal-input-error");
-        }
-      });
-      input.addEventListener("blur", finishRename);
-      input.addEventListener("keydown", (ev: KeyboardEvent) => {
-        if (ev.key === "Enter") {
-          ev.preventDefault();
-          finishRename();
-        }
-        if (ev.key === "Escape") this.render();
-      });
+      if (headerDragStarted) return;
+      doEditTitle();
     });
 
     // ── Column options button (⋯) — replaces grip ────────────────────────────
     const gripBtn = el("button", { cls: "kanban-grip-btn" });
     gripBtn.title = "Column options";
     si(gripBtn, "more-horizontal");
+    if (col.bgColor) {
+      const fg = adaptiveForeground(col.bgColor);
+      gripBtn.style.setProperty("color", fg, "important");
+    }
 
     // ── Column dropdown menu ──────────────────────────────────────────────────
     let colMenuEl: HTMLElement | null = null;
@@ -979,31 +945,43 @@ class KanbanRenderer extends MarkdownRenderChild {
       colMenuEl = null;
     };
 
+    // colorPicker created per-menu-open inside gripBtn click, appended to colMenuEl
+
+    // ── Column options dropdown ───────────────────────────────────────────────
+
     const doEditTitle = () => {
       closeColMenu();
-      const inputWrap = div("kanban-inline-wrap");
+      colEl.querySelector(".kanban-rename-panel")?.remove();
+      const panel = div("kanban-rename-panel");
+      panel.style.background = col.bgColor || "var(--background-secondary)";
       const input = el("input", {
-        cls: "kanban-inline-input",
+        cls: "kanban-rename-input",
       }) as HTMLInputElement;
       input.value = col.displayTitle;
-      const errorEl = document.createElement("span");
-      errorEl.className = "kanban-inline-error";
-      errorEl.textContent = "Title cannot be empty";
-      errorEl.style.display = "none";
-      inputWrap.appendChild(input);
-      inputWrap.appendChild(errorEl);
-      header.replaceChild(inputWrap, titleEl);
+      input.placeholder = "Column name...";
+      const doneBtn = el("button", {
+        cls: "kanban-rename-done-btn",
+        text: "Done",
+      });
+      const doneIconEl = el("span", { cls: "kanban-rename-done-icon" });
+      si(doneIconEl, "corner-down-left");
+      doneBtn.appendChild(doneIconEl);
+      panel.appendChild(input);
+      panel.appendChild(doneBtn);
+      const headerRect = header.getBoundingClientRect();
+      const colRect = colEl.getBoundingClientRect();
+      panel.style.top = headerRect.bottom - colRect.top + "px";
+      colEl.appendChild(panel);
       input.focus();
       input.select();
-
-      const finishRename = () => {
+      const finish = () => {
         const newName = input.value.trim();
         if (!newName) {
-          errorEl.style.display = "block";
           input.classList.add("kanban-modal-input-error");
           input.focus();
           return;
         }
+        panel.remove();
         const bgTag = col.title.match(BG_TAG_RE);
         col.title = bgTag ? `${newName} ${bgTag[0]}` : newName;
         const parsed = parseBgColor(col.title);
@@ -1011,31 +989,32 @@ class KanbanRenderer extends MarkdownRenderChild {
         col.bgColor = parsed.bgColor;
         this.saveAndRender();
       };
-      input.addEventListener("input", () => {
-        if (input.value.trim()) {
-          errorEl.style.display = "none";
-          input.classList.remove("kanban-modal-input-error");
-        }
+      input.addEventListener("input", () =>
+        input.classList.remove("kanban-modal-input-error"),
+      );
+      doneBtn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        finish();
       });
-      input.addEventListener("blur", finishRename);
       input.addEventListener("keydown", (e: KeyboardEvent) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          finishRename();
+          finish();
         }
-        if (e.key === "Escape") this.render();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          panel.remove();
+        }
       });
-    };
-
-    const doDeleteCol = async () => {
-      closeColMenu();
-      const confirmed = await kanbanConfirm(
-        `Delete "${col.displayTitle}" and all its cards?`,
-        colEl,
-      );
-      if (!confirmed) return;
-      this.columns = this.columns.filter((c) => c !== col);
-      this.saveAndRender();
+      setTimeout(() => {
+        const onOut = (e: MouseEvent) => {
+          if (!panel.contains(e.target as Node)) {
+            panel.remove();
+            document.removeEventListener("mousedown", onOut, true);
+          }
+        };
+        document.addEventListener("mousedown", onOut, true);
+      }, 0);
     };
 
     gripBtn.addEventListener("click", (e) => {
@@ -1056,7 +1035,12 @@ class KanbanRenderer extends MarkdownRenderChild {
         item.appendChild(el("span", { text: label }));
         return item;
       };
+      const mkSep = () => {
+        const s = div("kanban-dropdown-sep");
+        return s;
+      };
 
+      // Edit Title
       const editItem = mkItem("pencil", "Edit Title");
       editItem.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1064,33 +1048,129 @@ class KanbanRenderer extends MarkdownRenderChild {
       });
       colMenuEl.appendChild(editItem);
 
+      // Delete Column
       const delItem = mkItem("trash-2", "Delete Column", true);
-      delItem.addEventListener("click", (e) => {
+      delItem.addEventListener("click", async (e) => {
         e.stopPropagation();
-        doDeleteCol();
+        closeColMenu();
+        const confirmed = await kanbanConfirm(
+          `Delete "${col.displayTitle}" and all its cards?`,
+          colEl,
+        );
+        if (!confirmed) return;
+        this.columns = this.columns.filter((c) => c !== col);
+        this.saveAndRender();
       });
       colMenuEl.appendChild(delItem);
 
-      // Mount on body so overflow:hidden on colEl doesn't clip the menu
+      // ── separator ──
+      colMenuEl.appendChild(mkSep());
+
+      // Change Color — swatch shows current color
+      const colorItem = div("kanban-dropdown-item kanban-dropdown-color-item");
+      const colorIconEl = el("span", { cls: "kanban-dropdown-icon" });
+      si(colorIconEl, "palette");
+      const colorItemSwatch = div("kanban-dropdown-color-swatch");
+      colorItemSwatch.style.background = col.bgColor || "transparent";
+      colorItemSwatch.style.border = col.bgColor
+        ? "none"
+        : "1px dashed var(--text-muted)";
+      colorItem.appendChild(colorIconEl);
+      colorItem.appendChild(el("span", { text: "Change Color" }));
+      colorItem.appendChild(colorItemSwatch);
+      // ── color picker appended INSIDE colMenuEl so it's never "outside" ─────
+      const colorPicker = el("input", {
+        attr: { type: "color" },
+      }) as HTMLInputElement;
+      colorPicker.className = "kanban-color-picker-input";
+      colorPicker.value = col.bgColor || "#ffffff";
+      colMenuEl.appendChild(colorPicker);
+      // Position picker at right edge of dropdown after menu is mounted
+      const positionPicker = () => {
+        const menuRect = colMenuEl!.getBoundingClientRect();
+        const spaceRight = window.innerWidth - menuRect.right;
+        if (spaceRight >= 20) {
+          // Enough space on right — place picker at right edge of dropdown, vertically at colorItem
+          colorPicker.style.position = "fixed";
+          colorPicker.style.left = menuRect.right + "px";
+          colorPicker.style.top = menuRect.top + menuRect.height / 2 + "px";
+          colorPicker.style.width = "1px";
+          colorPicker.style.height = "1px";
+        } else {
+          // Not enough space — place at left edge so picker opens to the left
+          colorPicker.style.position = "fixed";
+          colorPicker.style.left = menuRect.left + "px";
+          colorPicker.style.top = menuRect.top + menuRect.height / 2 + "px";
+          colorPicker.style.width = "1px";
+          colorPicker.style.height = "1px";
+        }
+      };
+      colorPicker.addEventListener("change", () => {
+        const newColor = colorPicker.value;
+        col.title = col.bgColor
+          ? col.title.replace(BG_TAG_RE, `[bg:${newColor}]`)
+          : `${col.displayTitle} [bg:${newColor}]`;
+        const parsed = parseBgColor(col.title);
+        col.displayTitle = parsed.displayTitle || "Untitled";
+        col.bgColor = parsed.bgColor;
+        closeColMenu();
+        this.saveAndRender();
+      });
+
+      colorItem.addEventListener("click", (e) => {
+        e.stopPropagation();
+        colorPicker.click();
+      });
+      colMenuEl.appendChild(colorItem);
+
+      // Remove Color — only shown if column has a color
+      if (col.bgColor) {
+        const removeColorItem = mkItem("x-circle", "Remove Color");
+        removeColorItem.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeColMenu();
+          col.title = col.title.replace(BG_TAG_RE, "").trim();
+          const parsed = parseBgColor(col.title);
+          col.displayTitle = parsed.displayTitle || "Untitled";
+          col.bgColor = parsed.bgColor;
+          this.saveAndRender();
+        });
+        colMenuEl.appendChild(removeColorItem);
+      }
+
+      // Position dropdown
       colMenuEl.style.position = "fixed";
       document.body.appendChild(colMenuEl);
       const btnRect = gripBtn.getBoundingClientRect();
-      // Position below the grip button, left-aligned with it
       colMenuEl.style.top = btnRect.bottom + 4 + "px";
       colMenuEl.style.left = btnRect.left + "px";
       colMenuEl.style.right = "auto";
 
+      // Clamp to viewport, then position color picker
+      requestAnimationFrame(() => {
+        const r = colMenuEl!.getBoundingClientRect();
+        if (r.right > window.innerWidth)
+          colMenuEl!.style.left = btnRect.right - r.width + "px";
+        positionPicker();
+      });
+
+      // Use mousedown (not click) — Electron native picker doesn't fire click on backdrop
       const onOutside = (ev: MouseEvent) => {
         if (!colMenuEl?.contains(ev.target as Node)) {
           closeColMenu();
-          document.removeEventListener("click", onOutside, true);
+          document.removeEventListener("mousedown", onOutside, true);
         }
       };
-      setTimeout(() => document.addEventListener("click", onOutside, true), 0);
+      setTimeout(
+        () => document.addEventListener("mousedown", onOutside, true),
+        0,
+      );
     });
 
+    const headerSpacer = div("kanban-header-spacer");
     header.appendChild(titleEl);
     header.appendChild(badge);
+    header.appendChild(headerSpacer);
     header.appendChild(headerAddBtn);
     header.appendChild(gripBtn);
     colEl.appendChild(header);
@@ -2015,16 +2095,37 @@ class KanbanRenderer extends MarkdownRenderChild {
     style.textContent = `
       .kanban-plugin-container{display:flex;flex-direction:column;padding:8px 0;gap:0;position:relative}
       .kanban-board-scroll{overflow-x:auto;width:100%}.kanban-board{display:flex;gap:14px;align-items:flex-start;padding:4px 2px 12px;min-width:max-content}
-      .kanban-column{background:var(--background-secondary);border-radius:10px;display:flex;flex-direction:column;padding:10px;gap:8px;border:1px solid var(--background-modifier-border);overflow:hidden}
+      .kanban-column{background:var(--background-secondary);border-radius:10px;display:flex;flex-direction:column;padding:10px;gap:8px;border:1px solid var(--background-modifier-border);overflow:visible;position:relative}
       .kanban-column-header{display:flex;align-items:center;gap:4px;padding-bottom:6px;border-bottom:2px solid var(--interactive-accent);cursor:grab;user-select:none}
-      .kanban-column-title{font-weight:700;font-size:.9em;flex:1;cursor:pointer;color:var(--text-normal);user-select:none}
-      .kanban-count-badge{background:var(--interactive-accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:.75em;font-weight:700}
-      .kanban-header-add-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;border-radius:4px;display:flex;align-items:center;justify-content:center}.kanban-header-add-btn svg{width:15px;height:15px}
-      .kanban-header-add-btn:hover{color:var(--interactive-accent);background:var(--background-modifier-hover)}
+      .kanban-column-title{font-weight:700;font-size:.9em;cursor:pointer;color:var(--text-normal);user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+      .kanban-rename-panel{position:absolute;left:0;right:0;top:100%;z-index:999;display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--background-modifier-border);border-top:none;border-radius:0 0 8px 8px;box-shadow:0 6px 16px rgba(0,0,0,.15);animation:kanban-panel-in .12s ease}
+      @keyframes kanban-panel-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+      .kanban-edit-row{display:flex;align-items:center;gap:8px}
+      .kanban-edit-label{font-size:.75em;font-weight:600;color:var(--text-muted);width:36px;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em}
+      .kanban-edit-color-right{display:flex;align-items:center;gap:6px;flex:1}
+      .kanban-color-swatch{width:22px;height:22px;border-radius:5px;border:1px solid var(--background-modifier-border);cursor:pointer;flex-shrink:0;transition:transform .1s}
+      .kanban-color-swatch:hover{transform:scale(1.1)}
+      .kanban-color-picker-input{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:10000}
+      .kanban-color-clear-btn{background:transparent!important;border:1px solid var(--background-modifier-border)!important;color:var(--text-muted);font-size:.75em;padding:2px 7px;border-radius:4px;cursor:pointer;transition:background .15s,color .15s;box-shadow:none!important}
+      .kanban-color-clear-btn:hover{background:var(--background-modifier-hover)!important;color:var(--text-normal)}
+      .kanban-edit-action-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px;border-top:1px solid var(--background-modifier-border)}
+      .kanban-edit-delete-btn{display:flex;align-items:center;gap:5px;background:transparent!important;border:none!important;color:#e74c3c;font-size:.82em;font-weight:500;cursor:pointer;padding:3px 6px;border-radius:5px;transition:background .15s;box-shadow:none!important}
+      .kanban-edit-delete-btn:hover{background:rgba(231,76,60,.1)!important}
+      .kanban-edit-delete-btn .kanban-dropdown-icon svg{width:13px;height:13px;stroke:#e74c3c}
+      .kanban-rename-input{flex:1;background:var(--background-modifier-form-field);border:1px solid var(--background-modifier-border);border-radius:6px;padding:4px 8px;font-size:.9em;color:var(--text-normal);outline:none;min-width:0}
+      .kanban-rename-input:focus{border-color:var(--interactive-accent);box-shadow:0 0 0 2px rgba(var(--interactive-accent-rgb),.15)}
+      .kanban-rename-input.kanban-modal-input-error{border-color:#e74c3c}
+      .kanban-rename-done-btn{display:flex;align-items:center;gap:4px;background:var(--interactive-accent)!important;color:#fff!important;border:none!important;border-radius:6px;padding:4px 10px;font-size:.82em;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:opacity .15s;box-shadow:none!important}
+      .kanban-rename-done-btn:hover{opacity:.85}
+      .kanban-rename-done-icon{display:flex;align-items:center}.kanban-rename-done-icon svg{width:12px;height:12px;stroke:#fff}
+      .kanban-header-spacer{flex:1;min-width:4px}
+      .kanban-count-badge{background:var(--interactive-accent);color:#fff;border-radius:8px;padding:1px 6px;font-size:.7em;font-weight:700}
+      .kanban-header-add-btn{background:transparent!important;border:none;color:var(--text-muted);cursor:pointer;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,color .15s ease;box-shadow:none!important;width:24px;height:24px;flex-shrink:0}.kanban-header-add-btn svg{width:15px;height:15px}
+      .kanban-header-add-btn:hover{background:var(--background-modifier-hover)!important}
       .kanban-column-header:active{cursor:grabbing}
       .kanban-col-dragging{opacity:.5;outline:2px dashed var(--interactive-accent);outline-offset:2px;border-radius:10px}
-      .kanban-grip-btn{background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;border-radius:4px;display:flex;align-items:center;justify-content:center}.kanban-grip-btn svg{width:15px;height:15px}
-      .kanban-grip-btn:hover{color:var(--text-normal);background:var(--background-modifier-hover)}
+      .kanban-grip-btn{background:transparent!important;border:none;color:var(--text-muted);cursor:pointer;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,color .15s ease;box-shadow:none!important;width:24px;height:24px;flex-shrink:0}.kanban-grip-btn svg{width:15px;height:15px}
+      .kanban-grip-btn:hover{color:var(--text-normal)!important;background:var(--background-modifier-hover)!important}
       .kanban-cards-wrapper{position:relative;border-radius:6px}.kanban-cards-wrapper.kanban-cards-shadow::after{content:'';position:absolute;bottom:0;left:0;right:0;height:32px;border-radius:0 0 6px 6px;background:linear-gradient(to bottom,transparent,rgba(0,0,0,0.13));pointer-events:none;z-index:1}.kanban-cards{display:flex;flex-direction:column;gap:7px;min-height:40px;border-radius:6px;padding:2px;transition:background .15s}.kanban-cards::-webkit-scrollbar{display:none}.kanban-cards{scrollbar-width:none;-ms-overflow-style:none}
       .kanban-drop-indicator{display:none;height:3px;border-radius:3px;background:var(--interactive-accent);margin:2px 0;pointer-events:none;box-shadow:0 0 6px var(--interactive-accent);transition:none}
       .kanban-card{background:var(--background-primary);border-radius:7px;padding:8px 10px;cursor:grab;border:1px solid var(--background-modifier-border);transition:box-shadow .15s;position:relative}
@@ -2034,9 +2135,9 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-card-text{font-size:.88em;color:var(--text-normal);display:block;line-height:1.45;padding-right:28px}
       .kanban-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
       .kanban-tag{font-size:.7em;color:#fff;border-radius:8px;padding:1px 7px;font-weight:600}
-      .kanban-card-menu-btn{position:absolute;top:6px;right:6px;background:transparent;border:none;cursor:pointer;padding:2px 3px;border-radius:4px;opacity:0;transition:opacity .15s;color:var(--text-muted);display:flex;align-items:center;justify-content:center}.kanban-card-menu-btn svg{width:14px;height:14px}
-      .kanban-card-menu-btn:hover{opacity:1!important;background:var(--background-modifier-hover);color:var(--text-normal)}
-      .kanban-card-dropdown{position:fixed;z-index:9999;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:160px;padding:4px;display:flex;flex-direction:column;gap:2px}
+      .kanban-card-menu-btn{position:absolute;top:6px;right:6px;background:transparent!important;border:none;cursor:pointer;padding:0;border-radius:4px;opacity:0;transition:opacity .15s ease,background .15s ease,color .15s ease;color:var(--text-muted);display:flex;align-items:center;justify-content:center;box-shadow:none!important;width:22px;height:22px}.kanban-card-menu-btn svg{width:14px;height:14px}
+      .kanban-card-menu-btn:hover{opacity:1!important;background:var(--background-modifier-hover)!important;color:var(--text-normal)!important}
+      .kanban-card-dropdown{position:fixed;z-index:9999;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.22),0 2px 6px rgba(0,0,0,.1);min-width:170px;padding:4px;display:flex;flex-direction:column;gap:2px}
       .kanban-dropdown-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:5px;cursor:pointer;font-size:.85em;color:var(--text-normal);user-select:none}
       .kanban-dropdown-item:hover{background:var(--background-modifier-hover)}
       .kanban-dropdown-danger{color:#e74c3c}
