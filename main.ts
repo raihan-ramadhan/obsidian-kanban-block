@@ -230,6 +230,74 @@ function kanbanConfirm(
   });
 }
 
+// Confirm dialog with optional checkbox
+function kanbanConfirmWithCheckbox(
+  message: string,
+  checkboxLabel: string,
+  confirmLabel = "Delete",
+  danger = true,
+): Promise<{ confirmed: boolean; checked: boolean }> {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "kanban-modal-backdrop";
+    const modal = document.createElement("div");
+    modal.className = "kanban-modal";
+
+    const msg = document.createElement("p");
+    msg.className = "kanban-modal-msg";
+    if (message.includes("<")) msg.innerHTML = message;
+    else msg.textContent = message;
+
+    const checkRow = document.createElement("label");
+    checkRow.className = "kanban-modal-check-row";
+    const checkInput = document.createElement("input");
+    checkInput.type = "checkbox";
+    checkInput.className = "kanban-modal-checkbox";
+    checkRow.appendChild(checkInput);
+    checkRow.appendChild(document.createTextNode(" " + checkboxLabel));
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "kanban-modal-btns";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "kanban-cancel-btn";
+    cancelBtn.textContent = "Cancel";
+    const confirmBtn = document.createElement("button");
+    confirmBtn.className = "kanban-save-btn";
+    confirmBtn.textContent = confirmLabel;
+    if (danger) confirmBtn.style.background = "#e74c3c";
+
+    const close = (confirmed: boolean) => {
+      backdrop.remove();
+      resolve({ confirmed, checked: checkInput.checked });
+    };
+
+    cancelBtn.addEventListener("click", () => close(false));
+    confirmBtn.addEventListener("click", () => close(true));
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) close(false);
+    });
+    document.addEventListener("keydown", function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        document.removeEventListener("keydown", onKey);
+        close(false);
+      }
+      if (e.key === "Enter") {
+        document.removeEventListener("keydown", onKey);
+        close(true);
+      }
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(confirmBtn);
+    modal.appendChild(msg);
+    modal.appendChild(checkRow);
+    modal.appendChild(btnRow);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    confirmBtn.focus();
+  });
+}
+
 // Simple one-button alert — for errors and warnings
 function kanbanAlert(message: string, anchorEl: HTMLElement): Promise<void> {
   return new Promise((resolve) => {
@@ -784,9 +852,26 @@ class KanbanRenderer extends MarkdownRenderChild {
   private boardEl: HTMLElement | null = null;
   private scrollKey: string = "";
   private flairObserver: MutationObserver | null = null;
+  private selectedCards: Set<string> = new Set();
+  private lastSelectedCardId: string | null = null;
+  private anchorCardId: string | null = null;
+  private actionBar: HTMLElement | null = null;
+  private selectMode: boolean = false;
+  private selectBtn: HTMLElement | null = null;
+
+  private _escHandler: ((e: KeyboardEvent) => void) | null = null;
+  private _selectEventHandler: ((e: Event) => void) | null = null;
 
   onunload() {
     this.flairObserver?.disconnect();
+    if (this._escHandler)
+      document.removeEventListener("keydown", this._escHandler, false);
+    if (this._selectEventHandler)
+      document.removeEventListener(
+        "kanban-select-activated",
+        this._selectEventHandler,
+        false,
+      );
   }
   constructor(
     containerEl: HTMLElement,
@@ -903,6 +988,44 @@ class KanbanRenderer extends MarkdownRenderChild {
     directivesBtn.addEventListener("click", () => this.showDirectivesModal());
     toolbarRight.appendChild(directivesBtn);
 
+    // Select Cards button
+    const selectCardsBtn = el("button", {
+      cls: "kanban-toolbar-btn kanban-select-btn",
+    });
+    const selectIcon = el("span", { cls: "kanban-toolbar-btn-icon" });
+    si(selectIcon, "mouse-pointer-2");
+    selectCardsBtn.appendChild(selectIcon);
+    selectCardsBtn.appendChild(el("span", { text: "Select Cards" }));
+    setTooltip(selectCardsBtn, "Select cards");
+    this.selectBtn = selectCardsBtn;
+    selectCardsBtn.addEventListener("click", () => {
+      this.selectMode = !this.selectMode;
+      selectCardsBtn.classList.toggle(
+        "kanban-toolbar-btn-active",
+        this.selectMode,
+      );
+      if (!this.selectMode) {
+        this.selectedCards.clear();
+        this.lastSelectedCardId = null;
+        this.anchorCardId = null;
+        this.hideActionBar();
+      }
+      this.render();
+      if (this.selectMode) {
+        this.updateActionBar();
+        this.boardEl?.classList.add("kanban-select-mode");
+        // Small delay so other block's bar animates out first
+        setTimeout(() => {
+          document.dispatchEvent(
+            new CustomEvent("kanban-select-activated", {
+              detail: { source: this },
+            }),
+          );
+        }, 0);
+      } else {
+        this.boardEl?.classList.remove("kanban-select-mode");
+      }
+    });
     // New Column button (accent)
     const newColBtn = el("button", { cls: "kanban-toolbar-new-col-btn" });
     const newColIcon = el("span", { cls: "kanban-toolbar-new-col-icon" });
@@ -931,8 +1054,58 @@ class KanbanRenderer extends MarkdownRenderChild {
     });
     toolbarRight.appendChild(newColBtn);
 
+    const toolbarLeft = div("kanban-toolbar-left");
+    toolbarLeft.appendChild(selectCardsBtn);
+    toolbar.appendChild(toolbarLeft);
     toolbar.appendChild(toolbarRight);
     this.containerEl.appendChild(toolbar);
+
+    // Global Esc → cancel select mode
+    this._escHandler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && this.selectMode) {
+        e.stopPropagation();
+        this.clearSelection();
+      }
+    };
+    document.addEventListener("keydown", this._escHandler, false);
+
+    // Shift held → add class to board for cursor override on links
+    document.addEventListener(
+      "keydown",
+      (e: KeyboardEvent) => {
+        if (e.key === "Shift")
+          this.containerEl.classList.add("kanban-shift-held");
+      },
+      false,
+    );
+    document.addEventListener(
+      "keyup",
+      (e: KeyboardEvent) => {
+        if (e.key === "Shift")
+          this.containerEl.classList.remove("kanban-shift-held");
+      },
+      false,
+    );
+    window.addEventListener(
+      "blur",
+      () => {
+        this.containerEl.classList.remove("kanban-shift-held");
+      },
+      false,
+    );
+
+    // Mutual exclusive: cancel selectMode if another kanban block activates select
+    this._selectEventHandler = (e: Event) => {
+      if ((e as CustomEvent).detail?.source !== this && this.selectMode) {
+        // Animate out first, then new block's bar will animate in after 200ms delay
+        this.clearSelection();
+      }
+    };
+    document.addEventListener(
+      "kanban-select-activated",
+      this._selectEventHandler,
+      false,
+    );
 
     // ── Board scroll container — created once, scroll position never reset ──
     this.boardScrollEl = div("kanban-board-scroll");
@@ -1114,6 +1287,10 @@ class KanbanRenderer extends MarkdownRenderChild {
     });
 
     header.addEventListener("dragstart", (e: DragEvent) => {
+      if (this.selectMode) {
+        e.preventDefault();
+        return;
+      }
       // Ignore if started from a button/input/link
       if ((e.target as HTMLElement).closest("button,input,a")) {
         e.preventDefault();
@@ -1418,6 +1595,7 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     const cardsWrapper = div("kanban-cards-wrapper");
     const cardsEl = div("kanban-cards");
+    (cardsEl as any).__col_cards = sortedCards;
     cardsEl.dataset.colTitle = col.title;
     cardsEl.style.maxHeight = maxHeight;
     cardsEl.style.overflowY = "auto";
@@ -1535,6 +1713,10 @@ class KanbanRenderer extends MarkdownRenderChild {
     cardEl.dataset.cardId = card.id;
 
     cardEl.addEventListener("dragstart", (e) => {
+      if (this.selectMode) {
+        e.preventDefault();
+        return;
+      }
       e.dataTransfer?.setData("text/plain", card.id);
       // Delay adding class so drag image captures the normal card look
       setTimeout(() => cardEl.classList.add("kanban-dragging"), 0);
@@ -1707,40 +1889,47 @@ class KanbanRenderer extends MarkdownRenderChild {
     const doDelete = async () => {
       closeMenu();
       const linkedFile = getLinkedFile();
+
       if (linkedFile) {
         const wt = extractWikilink(card.text)!;
 
-        // Find other cards in any column that link to the same page
-        const otherRefs: { colTitle: string; cardText: string }[] = [];
+        // Find other cards linking to the same file
+        const otherRefs: { colTitle: string }[] = [];
         for (const c of this.columns) {
           for (const cd of c.cards) {
             if (cd.id === card.id) continue;
             if (extractWikilink(cd.text) === wt) {
-              // Show plain text preview — strip wikilinks/tags, max 40 chars
-              const preview =
-                cd.text
-                  .replace(/\[\[[^\]]+\]\]/g, "")
-                  .replace(/#[\w-]+/g, "")
-                  .trim() || wt;
-              const short =
-                preview.length > 40 ? preview.slice(0, 40) + "…" : preview;
-              otherRefs.push({ colTitle: c.displayTitle, cardText: short });
+              otherRefs.push({ colTitle: c.displayTitle });
             }
           }
         }
 
-        let msg = `Delete card and its linked note "${wt}.md"?`;
+        let msg = `Delete card <strong>"${wt}"</strong>?`;
         if (otherRefs.length > 0) {
-          const lines = otherRefs
-            .map((r) => `  • "${r.colTitle}" → ${r.cardText}`)
-            .join("\n");
-          msg += `\n\n⚠️ Also linked by:\n${lines}`;
+          const cols = [...new Set(otherRefs.map((r) => r.colTitle))]
+            .map((t) => `"${t}"`)
+            .join(", ");
+          msg += `<br><span class="kanban-modal-warn">⚠️ Also linked from: ${cols} — deleting the file will affect those cards too.</span>`;
         }
 
-        const confirmed = await kanbanConfirm(msg, cardEl);
+        const { confirmed, checked } = await kanbanConfirmWithCheckbox(
+          msg,
+          `Also delete ${wt}.md`,
+          "Delete",
+          true,
+        );
         if (!confirmed) return;
-        await this.obsApp.vault.trash(linkedFile, true);
+        if (checked) await this.obsApp.vault.trash(linkedFile, true);
+      } else {
+        const confirmed = await kanbanConfirm(
+          `Delete this card?`,
+          cardEl,
+          "Delete",
+          true,
+        );
+        if (!confirmed) return;
       }
+
       col.cards = col.cards.filter((c) => c.id !== card.id);
       this.saveAndRender();
     };
@@ -2230,10 +2419,322 @@ class KanbanRenderer extends MarkdownRenderChild {
       if (propsRow.children.length > 0) cardEl.appendChild(propsRow);
     }
 
+    // ── Checkbox for multi-select ───────────────────────────────────────────
+    const checkbox = el("input", {
+      cls: "kanban-card-checkbox",
+    }) as HTMLInputElement;
+    checkbox.type = "checkbox";
+    checkbox.checked = this.selectedCards.has(card.id);
+    if (checkbox.checked) cardEl.classList.add("kanban-card-selected");
+
+    checkbox.addEventListener("change", (e) => {
+      e.stopPropagation();
+      const allCardEls = Array.from(
+        cardsEl.querySelectorAll<HTMLElement>(".kanban-card"),
+      );
+      const colCards = ((cardsEl as any).__col_cards as KanbanCard[]) ?? [];
+      this.toggleCardSelection(card.id, cardEl, allCardEls, colCards, false);
+    });
+
+    // Shift+click, Ctrl/Cmd+click, or click in selectMode → select card
+    cardEl.addEventListener("click", (e: MouseEvent) => {
+      const isSelectContext =
+        e.shiftKey || e.ctrlKey || e.metaKey || this.selectMode;
+      if (!isSelectContext) return;
+      if ((e.target as HTMLElement).closest("button, input, a")) return;
+      e.preventDefault();
+
+      const isRange = e.shiftKey;
+      // Ctrl/Cmd or plain click in selectMode = single toggle
+      const isSingle =
+        e.ctrlKey || e.metaKey || (!e.shiftKey && this.selectMode);
+
+      // Auto-enable selectMode
+      if (!this.selectMode) {
+        this.selectMode = true;
+        if (this.selectBtn)
+          this.selectBtn.classList.add("kanban-toolbar-btn-active");
+        this.boardEl?.classList.add("kanban-select-mode");
+        setTimeout(
+          () =>
+            document.dispatchEvent(
+              new CustomEvent("kanban-select-activated", {
+                detail: { source: this },
+              }),
+            ),
+          0,
+        );
+        this.render();
+        // After render find fresh elements
+        const newCardEl = this.boardEl?.querySelector<HTMLElement>(
+          `[data-card-id="${card.id}"]`,
+        );
+        if (newCardEl) {
+          const newCardsEl = newCardEl.closest<HTMLElement>(".kanban-cards");
+          const allCardEls = newCardsEl
+            ? Array.from(
+                newCardsEl.querySelectorAll<HTMLElement>(".kanban-card"),
+              )
+            : [];
+          const colCards = newCardsEl
+            ? (((newCardsEl as any).__col_cards as KanbanCard[]) ?? [])
+            : [];
+          this.toggleCardSelection(
+            card.id,
+            newCardEl,
+            allCardEls,
+            colCards,
+            false,
+          );
+        }
+        this.updateActionBar();
+        return;
+      }
+
+      const allCardEls = Array.from(
+        cardsEl.querySelectorAll<HTMLElement>(".kanban-card"),
+      );
+      const colCards = ((cardsEl as any).__col_cards as KanbanCard[]) ?? [];
+      // Pass shiftKey so toggleCardSelection knows to range-select vs single-toggle
+      this.toggleCardSelection(card.id, cardEl, allCardEls, colCards, isRange);
+    });
+
     menuBtn.addEventListener("click", openMenu);
-    cardEl.appendChild(quickEditBtn);
-    cardEl.appendChild(menuBtn);
+
+    if (this.selectMode) {
+      // In select mode: show checkbox, hide pencil+menu
+      checkbox.style.cssText =
+        "display:block!important;position:absolute!important;top:7px!important;right:7px!important;left:auto!important;width:14px!important;height:14px!important;margin:0!important;z-index:2";
+      cardEl.appendChild(checkbox);
+      // Don't append quickEditBtn and menuBtn
+    } else {
+      // Normal mode: checkbox on hover only, pencil+menu visible on hover
+      cardEl.appendChild(checkbox);
+      cardEl.appendChild(quickEditBtn);
+      cardEl.appendChild(menuBtn);
+    }
     cardsEl.appendChild(cardEl);
+  }
+
+  private clearSelection() {
+    this.selectedCards.clear();
+    this.lastSelectedCardId = null;
+    this.selectMode = false;
+    if (this.selectBtn)
+      this.selectBtn.classList.remove("kanban-toolbar-btn-active");
+    this.boardEl
+      ?.querySelectorAll(".kanban-card-selected")
+      .forEach((el) => el.classList.remove("kanban-card-selected"));
+    this.boardEl
+      ?.querySelectorAll(".kanban-card-checkbox")
+      .forEach((el) => ((el as HTMLInputElement).checked = false));
+    this.hideActionBar();
+    this.render();
+  }
+
+  private hideActionBar() {
+    if (!this.actionBar) return;
+    const bar = this.actionBar;
+    this.actionBar = null;
+    bar.classList.add("kanban-bar-hiding");
+    bar.addEventListener("animationend", () => bar.remove(), { once: true });
+  }
+
+  private updateActionBar() {
+    if (!this.selectMode) {
+      this.hideActionBar();
+      return;
+    }
+    if (!this.actionBar) {
+      this.actionBar = div("kanban-action-bar");
+      document.body.appendChild(this.actionBar);
+    }
+    this.actionBar.innerHTML = "";
+
+    const count = this.selectedCards.size;
+    const countEl = el("span", {
+      cls: "kanban-action-bar-count",
+      text: `${count} card${count !== 1 ? "s" : ""} selected`,
+    });
+    const deleteBtn = el("button", {
+      cls: "kanban-action-bar-delete",
+      text: "Delete",
+    }) as HTMLButtonElement;
+    if (count === 0) {
+      deleteBtn.disabled = true;
+      deleteBtn.style.opacity = "0.4";
+      deleteBtn.style.cursor = "not-allowed";
+    }
+    const cancelBtn = el("button", {
+      cls: "kanban-action-bar-cancel",
+      text: "Cancel",
+    });
+
+    deleteBtn.addEventListener("click", async () => {
+      if (count === 0) return;
+      await this.bulkDelete();
+    });
+    cancelBtn.addEventListener("click", () => this.clearSelection());
+
+    this.actionBar.appendChild(countEl);
+    this.actionBar.appendChild(deleteBtn);
+    this.actionBar.appendChild(cancelBtn);
+  }
+
+  private async bulkDelete() {
+    const ids = Array.from(this.selectedCards);
+    const toDelete: { card: KanbanCard; col: KanbanColumn }[] = [];
+    for (const col of this.columns) {
+      for (const card of col.cards) {
+        if (ids.includes(card.id)) toDelete.push({ card, col });
+      }
+    }
+
+    // Collect unique linked files in selection
+    const linkedEntries = toDelete
+      .map(({ card }) => ({ card, wt: extractWikilink(card.text) }))
+      .filter((x): x is { card: KanbanCard; wt: string } => !!x.wt);
+    // Only include files that actually exist in vault
+    const uniqueFiles = [...new Set(linkedEntries.map((x) => x.wt))].filter(
+      (wt) => !!this.getLinkedFileByName(wt),
+    );
+
+    // Find cross-refs: files linked by cards NOT in selection
+    const selectedIds = new Set(ids);
+    const crossRefs: { wt: string; colTitle: string }[] = [];
+    for (const wt of uniqueFiles) {
+      for (const col of this.columns) {
+        for (const card of col.cards) {
+          if (selectedIds.has(card.id)) continue;
+          if (extractWikilink(card.text) === wt) {
+            crossRefs.push({ wt, colTitle: col.displayTitle });
+          }
+        }
+      }
+    }
+
+    // Build message
+    let msg = `Delete <strong>${toDelete.length} card${toDelete.length !== 1 ? "s" : ""}</strong>?`;
+    if (uniqueFiles.length > 0) {
+      const fileList = uniqueFiles.map((f) => `${f}.md`).join(", ");
+      msg += `<br><span style="font-size:.85em;color:var(--text-muted)">${uniqueFiles.length} linked note${uniqueFiles.length !== 1 ? "s" : ""}: ${fileList}</span>`;
+    }
+    if (crossRefs.length > 0) {
+      const affected = [
+        ...new Set(crossRefs.map((r) => `"${r.wt}.md" (in "${r.colTitle}")`)),
+      ].join(", ");
+      msg += `<br><span class="kanban-modal-warn">⚠️ Also linked from other cards: ${affected} — deleting files will affect those cards too.</span>`;
+    }
+
+    if (uniqueFiles.length > 0) {
+      const { confirmed, checked } = await kanbanConfirmWithCheckbox(
+        msg,
+        `Also delete ${uniqueFiles.length} linked file${uniqueFiles.length !== 1 ? "s" : ""}`,
+        "Delete",
+        true,
+      );
+      if (!confirmed) return;
+
+      if (checked) {
+        for (const wt of uniqueFiles) {
+          const file = this.getLinkedFileByName(wt);
+          if (file) await this.obsApp.vault.trash(file, true);
+        }
+      }
+    } else {
+      const confirmed = await kanbanConfirm(
+        msg,
+        document.body as any,
+        "Delete",
+        true,
+      );
+      if (!confirmed) return;
+    }
+
+    for (const { card, col } of toDelete) {
+      col.cards = col.cards.filter((c) => c.id !== card.id);
+    }
+    this.clearSelection();
+    await this.saveAndRender();
+  }
+
+  private getLinkedFileByName(wt: string) {
+    const kf = getFolderPath(this.ctx.sourcePath);
+    const sub = parsePagesFolder(this.source);
+    const pf = kf ? `${kf}/${sub}` : sub;
+    const inPages = this.obsApp.vault.getFileByPath(`${pf}/${wt}.md`);
+    if (inPages) return inPages;
+    const legacy = kf ? `${kf}/${wt}.md` : `${wt}.md`;
+    return this.obsApp.vault.getFileByPath(legacy);
+  }
+
+  private toggleCardSelection(
+    cardId: string,
+    cardEl: HTMLElement,
+    allCardEls: HTMLElement[],
+    allCards: KanbanCard[],
+    shiftKey: boolean,
+  ) {
+    const ids = allCards.map((c) => c.id);
+
+    if (shiftKey && this.anchorCardId) {
+      // Range select: select anchor→target, deselect everything outside range
+      const a = ids.indexOf(this.anchorCardId);
+      const b = ids.indexOf(cardId);
+      const [from, to] = a < b ? [a, b] : [b, a];
+
+      // Deselect all cards in this column first, then re-select range
+      ids.forEach((id, i) => {
+        const inRange = i >= from && i <= to;
+        const el = allCardEls[i];
+        if (inRange) {
+          this.selectedCards.add(id);
+          if (el) {
+            el.classList.add("kanban-card-selected");
+            const cb = el.querySelector<HTMLInputElement>(
+              ".kanban-card-checkbox",
+            );
+            if (cb) cb.checked = true;
+          }
+        } else {
+          this.selectedCards.delete(id);
+          if (el) {
+            el.classList.remove("kanban-card-selected");
+            const cb = el.querySelector<HTMLInputElement>(
+              ".kanban-card-checkbox",
+            );
+            if (cb) cb.checked = false;
+          }
+        }
+      });
+      // lastSelectedCardId tracks end of range, anchor stays fixed
+      this.lastSelectedCardId = cardId;
+    } else {
+      // Single toggle (plain click or Ctrl/Cmd+click)
+      if (this.selectedCards.has(cardId)) {
+        this.selectedCards.delete(cardId);
+        cardEl.classList.remove("kanban-card-selected");
+        const cb = cardEl.querySelector<HTMLInputElement>(
+          ".kanban-card-checkbox",
+        );
+        if (cb) cb.checked = false;
+        // If deselecting current anchor, clear it
+        if (this.anchorCardId === cardId) this.anchorCardId = null;
+      } else {
+        this.selectedCards.add(cardId);
+        cardEl.classList.add("kanban-card-selected");
+        const cb = cardEl.querySelector<HTMLInputElement>(
+          ".kanban-card-checkbox",
+        );
+        if (cb) cb.checked = true;
+      }
+      // Set new anchor on single select/deselect
+      this.anchorCardId = this.selectedCards.has(cardId)
+        ? cardId
+        : (this.anchorCardId ?? null);
+      this.lastSelectedCardId = cardId;
+    }
+    this.updateActionBar();
   }
 
   private showAddCardInput(cardsEl: HTMLElement, col: KanbanColumn) {
@@ -2903,6 +3404,8 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.15)}
       .kanban-card:hover .kanban-card-menu-btn{opacity:1}
       .kanban-card.kanban-dragging{opacity:.4;cursor:grabbing}
+      .kanban-select-mode .kanban-card{cursor:default!important}
+      .kanban-select-mode .kanban-column-header{cursor:default!important}
       .kanban-card-text{font-size:.88em;color:var(--text-normal);display:block;line-height:1.45;padding-right:28px;white-space:pre-wrap}
       .kanban-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
       .kanban-tag{font-size:.7em;color:#fff;border-radius:8px;padding:1px 7px;font-weight:600}
@@ -2932,7 +3435,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-inline-wrap{display:flex;flex-direction:column;flex:1;min-width:0;gap:2px}
       .kanban-inline-input{font-weight:700;font-size:.9em;background:var(--background-primary);border:1px solid var(--interactive-accent);border-radius:4px;padding:2px 6px;color:var(--text-normal);width:100%;box-sizing:border-box}
       .kanban-inline-error{font-size:.72em;color:#e74c3c;line-height:1.2;padding:0 2px}
-      .kanban-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-bottom:10px;width:100%;box-sizing:border-box}
+      .kanban-toolbar{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:10px;width:100%;box-sizing:border-box}
       .kanban-toolbar-right{display:flex;align-items:center;gap:4px;flex-shrink:0}
       .kanban-toolbar-btn{background:transparent!important;border:1px solid var(--background-modifier-border)!important;color:var(--text-muted);border-radius:6px;cursor:pointer;padding:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;box-shadow:none!important;flex-shrink:0}.kanban-toolbar-btn svg{width:14px;height:14px}
       .kanban-toolbar-btn:hover{background:var(--background-modifier-hover)!important;color:var(--text-normal)!important}
@@ -2953,6 +3456,8 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-search-empty{text-align:center;color:var(--text-muted);font-size:.8em;padding:10px 0;font-style:italic}
       .kanban-card-link{color:var(--link-color, var(--interactive-accent));text-decoration:underline;cursor:pointer;font-size:inherit;background:none;border:none;padding:0}
       .kanban-card-link:hover{color:var(--link-color-hover, var(--interactive-accent-hover));text-decoration:underline}
+      .kanban-shift-held .kanban-card-link,.kanban-shift-held .kanban-ghost-pill,.kanban-ctrl-held .kanban-card-link,.kanban-ctrl-held .kanban-ghost-pill{cursor:default!important;pointer-events:none!important}
+      .kanban-select-mode .kanban-card-link,.kanban-select-mode .kanban-ghost-pill{cursor:default!important;pointer-events:none!important}
       .kanban-ghost-pill{display:inline-flex;align-items:center;gap:4px;cursor:pointer;border-radius:6px;padding:2px 4px 2px 2px;transition:background .15s;max-width:100%;overflow:hidden}
       .kanban-ghost-pill:hover{background:rgba(0,0,0,.04)}
       .kanban-ghost-icon{display:flex;align-items:center;opacity:.6;flex-shrink:0}.kanban-ghost-icon svg{width:12px;height:12px}
@@ -2972,6 +3477,22 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-modal-input{width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--interactive-accent);background:var(--background-primary);color:var(--text-normal);font-size:.9em;box-sizing:border-box;outline:none}
       .kanban-modal-input-error{border-color:#e74c3c!important;}
       .kanban-modal-error{margin:4px 0 0;font-size:.8em;color:#e74c3c}
+      .kanban-modal-check-row{display:flex;align-items:center;gap:6px;font-size:.85em;color:var(--text-normal);cursor:pointer;padding:4px 0;user-select:none}
+      .kanban-modal-checkbox{cursor:pointer;accent-color:var(--interactive-accent)}
+      .kanban-card-checkbox{display:none;position:absolute;top:7px;right:7px;width:14px;height:14px;margin:0;cursor:pointer;accent-color:var(--interactive-accent);z-index:2}
+      .kanban-toolbar-btn-active{background:var(--interactive-accent)!important;color:#fff!important;border-color:var(--interactive-accent)!important}
+      .kanban-toolbar-btn-active:hover{background:var(--interactive-accent)!important;color:#fff!important;opacity:.88}
+      .kanban-select-btn{display:flex;align-items:center;gap:5px;padding:0 10px!important;width:auto!important}
+      .kanban-toolbar-btn-icon{display:flex;align-items:center}.kanban-toolbar-btn-icon svg{width:14px;height:14px}
+      .kanban-card-selected{border-color:var(--interactive-accent)!important;background:var(--background-primary-alt)!important}
+      @keyframes kanban-bar-in{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+      @keyframes kanban-bar-out{from{opacity:1;transform:translateX(-50%) translateY(0)}to{opacity:0;transform:translateX(-50%) translateY(16px)}}
+      .kanban-action-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;display:flex;align-items:center;gap:10px;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;padding:8px 14px;box-shadow:0 8px 28px rgba(0,0,0,.22);animation:kanban-bar-in .2s ease forwards}
+      .kanban-action-bar.kanban-bar-hiding{animation:kanban-bar-out .18s ease forwards}
+      .kanban-action-bar-count{font-size:.85em;font-weight:600;color:var(--text-normal)}
+      .kanban-action-bar-delete{background:#e74c3c!important;color:#fff!important;border:none!important;border-radius:6px;padding:4px 12px;font-size:.85em;cursor:pointer;font-weight:600}
+      .kanban-action-bar-delete:hover{background:#c0392b!important}
+      .kanban-action-bar-cancel{background:transparent!important;border:1px solid var(--background-modifier-border)!important;box-shadow:none!important;cursor:pointer;color:var(--text-muted);border-radius:6px;padding:4px 12px;font-size:.85em}.kanban-action-bar-cancel:hover{color:var(--text-normal);background:var(--background-modifier-hover)!important}
       .kanban-modal-warn{color:#e74c3c;font-weight:600}
       .kanban-modal-msg strong{color:var(--text-normal)}
       .kanban-modal-msg br{display:block;content:'';margin-top:6px}
