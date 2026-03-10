@@ -8,6 +8,7 @@ import {
   MenuItem,
   setIcon,
   setTooltip,
+  Notice,
 } from "obsidian";
 
 // ─── Icon helper ─────────────────────────────────────────────────────────────
@@ -1889,6 +1890,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     const doDelete = async () => {
       closeMenu();
       const linkedFile = getLinkedFile();
+      let deleteFile = false;
 
       if (linkedFile) {
         const wt = extractWikilink(card.text)!;
@@ -1919,7 +1921,7 @@ class KanbanRenderer extends MarkdownRenderChild {
           true,
         );
         if (!confirmed) return;
-        if (checked) await this.obsApp.vault.trash(linkedFile, true);
+        deleteFile = checked;
       } else {
         const confirmed = await kanbanConfirm(
           `Delete this card?`,
@@ -1930,8 +1932,34 @@ class KanbanRenderer extends MarkdownRenderChild {
         if (!confirmed) return;
       }
 
+      // Soft delete: snapshot source string before delete for reliable undo
+      const sourceSnapshot = this.source;
       col.cards = col.cards.filter((c) => c.id !== card.id);
-      this.saveAndRender();
+      await this.saveAndRender();
+
+      let undone = false;
+      const frag = document.createDocumentFragment();
+      frag.createEl("span", { text: "Card deleted. " });
+      const undoBtn = frag.createEl("a", { text: "Undo", href: "#" });
+      undoBtn.style.cssText =
+        "font-weight:600;cursor:pointer;text-decoration:underline;margin-left:4px";
+
+      const notice = new Notice(frag, deleteFile ? 5000 : 4000);
+      undoBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        undone = true;
+        notice.hide();
+        this.columns = parseKanban(sourceSnapshot);
+        this.source = sourceSnapshot;
+        await this.saveAndRender();
+        new Notice("Undo successful.", 2000);
+      });
+
+      if (deleteFile && linkedFile) {
+        setTimeout(async () => {
+          if (!undone) await this.obsApp.vault.trash(linkedFile, true);
+        }, 5000);
+      }
     };
 
     const doConvertToPage = async () => {
@@ -2627,6 +2655,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       msg += `<br><span class="kanban-modal-warn">⚠️ Also linked from other cards: ${affected} — deleting files will affect those cards too.</span>`;
     }
 
+    let deleteFiles = false;
     if (uniqueFiles.length > 0) {
       const { confirmed, checked } = await kanbanConfirmWithCheckbox(
         msg,
@@ -2635,13 +2664,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         true,
       );
       if (!confirmed) return;
-
-      if (checked) {
-        for (const wt of uniqueFiles) {
-          const file = this.getLinkedFileByName(wt);
-          if (file) await this.obsApp.vault.trash(file, true);
-        }
-      }
+      deleteFiles = checked;
     } else {
       const confirmed = await kanbanConfirm(
         msg,
@@ -2652,11 +2675,44 @@ class KanbanRenderer extends MarkdownRenderChild {
       if (!confirmed) return;
     }
 
+    // Snapshot source string before delete for reliable undo
+    const sourceSnapshot = this.source;
+
     for (const { card, col } of toDelete) {
       col.cards = col.cards.filter((c) => c.id !== card.id);
     }
     this.clearSelection();
     await this.saveAndRender();
+
+    // Soft delete: show undo toast, trash files after 5s if not undone
+    let undone = false;
+    const n = toDelete.length;
+    const frag = document.createDocumentFragment();
+    frag.createEl("span", { text: `${n} card${n !== 1 ? "s" : ""} deleted. ` });
+    const undoBtn = frag.createEl("a", { text: "Undo", href: "#" });
+    undoBtn.style.cssText =
+      "font-weight:600;cursor:pointer;text-decoration:underline;margin-left:4px";
+
+    const notice = new Notice(frag, deleteFiles ? 5000 : 4000);
+    undoBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      undone = true;
+      notice.hide();
+      this.columns = parseKanban(sourceSnapshot);
+      this.source = sourceSnapshot;
+      await this.saveAndRender();
+      new Notice("Undo successful.", 2000);
+    });
+
+    if (deleteFiles) {
+      setTimeout(async () => {
+        if (undone) return;
+        for (const wt of uniqueFiles) {
+          const file = this.getLinkedFileByName(wt);
+          if (file) await this.obsApp.vault.trash(file, true);
+        }
+      }, 5000);
+    }
   }
 
   private getLinkedFileByName(wt: string) {
@@ -3341,17 +3397,23 @@ class KanbanRenderer extends MarkdownRenderChild {
     const sectionInfo = this.ctx.getSectionInfo(this.containerEl);
     if (sectionInfo) {
       const lines = content.split("\n");
+      // lineStart = opening fence, lineEnd = closing fence (inclusive)
       const before = lines.slice(0, sectionInfo.lineStart + 1).join("\n");
-      const after = lines.slice(sectionInfo.lineEnd).join("\n");
-      await this.obsApp.vault.modify(
-        file,
-        before + "\n" + newSource + "\n" + after,
-      );
+      const after = lines.slice(sectionInfo.lineEnd + 1).join("\n");
+      const joined =
+        after.length > 0
+          ? before + "\n" + newSource + "\n```\n" + after
+          : before + "\n" + newSource + "\n```";
+      await this.obsApp.vault.modify(file, joined);
     } else {
       const newContent = content.replace(
-        /```kanban\n[\s\S]*?```/,
+        /```kanban\r?\n[\s\S]*?\r?\n```/,
         "```kanban\n" + newSource + "\n```",
       );
+      if (newContent === content) {
+        console.warn("Kanban: regex replace failed, content unchanged");
+        return;
+      }
       await this.obsApp.vault.modify(file, newContent);
     }
   }

@@ -13,6 +13,7 @@ declare module "obsidian" {
     getAbstractFileByPath(path: string): { path: string } | null;
     trash(file: TFile, system: boolean): Promise<void>;
     rename(file: TFile, newPath: string): Promise<void>;
+    getMarkdownFiles(): TFile[];
   }
 
   interface WorkspaceLeaf {
@@ -102,4 +103,39 @@ declare module "obsidian" {
     tooltip: string,
     options?: { placement?: string },
   ): void;
+
+  class Notice {
+    constructor(message: string | DocumentFragment, timeout?: number);
+    setMessage(message: string | DocumentFragment): this;
+    hide(): void;
+  }
+}
+
+// Obsidian augments HTMLElement and DocumentFragment with createEl, createDiv, createSpan
+interface HTMLElement {
+  createEl<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    attrs?: {
+      text?: string;
+      cls?: string;
+      attr?: Record<string, string>;
+      href?: string;
+    },
+    callback?: (el: HTMLElementTagNameMap[K]) => void,
+  ): HTMLElementTagNameMap[K];
+  createDiv(attrs?: { text?: string; cls?: string }): HTMLDivElement;
+  createSpan(attrs?: { text?: string; cls?: string }): HTMLSpanElement;
+}
+
+interface DocumentFragment {
+  createEl<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    attrs?: {
+      text?: string;
+      cls?: string;
+      attr?: Record<string, string>;
+      href?: string;
+    },
+    callback?: (el: HTMLElementTagNameMap[K]) => void,
+  ): HTMLElementTagNameMap[K];
 }
