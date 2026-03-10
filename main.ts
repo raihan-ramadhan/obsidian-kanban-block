@@ -2388,12 +2388,13 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // ── Quick edit/rename button (pencil) — visible on hover like menuBtn ──────
     const isWikilinkCard = !!extractWikilink(card.text);
+    const isLinkedNoteCard = isWikilinkCard && !!getLinkedFile(); // wikilink + file exists
     const quickEditBtn = el("button", { cls: "kanban-card-quick-edit-btn" });
     si(quickEditBtn, "pencil");
-    setTooltip(quickEditBtn, isWikilinkCard ? "Rename note..." : "Edit card");
+    setTooltip(quickEditBtn, isLinkedNoteCard ? "Rename note..." : "Edit card");
     quickEditBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (isWikilinkCard) {
+      if (isLinkedNoteCard) {
         doRename();
       } else {
         doEdit();
