@@ -2156,12 +2156,21 @@ class KanbanRenderer extends MarkdownRenderChild {
         menuEl.appendChild(delItem);
       }
 
+      const btnRect = menuBtn.getBoundingClientRect();
       menuEl.style.position = "fixed";
       document.body.appendChild(menuEl);
-      const btnRect = menuBtn.getBoundingClientRect();
       menuEl.style.top = btnRect.bottom + 4 + "px";
-      menuEl.style.left = "auto";
-      menuEl.style.right = window.innerWidth - btnRect.right + "px";
+      menuEl.style.left = btnRect.left + "px";
+      menuEl.style.right = "auto";
+      requestAnimationFrame(() => {
+        if (!menuEl) return;
+        const r = menuEl.getBoundingClientRect();
+        // Default bottom-left; flip right if overflow right edge
+        if (r.right > window.innerWidth - 8)
+          menuEl.style.left = window.innerWidth - r.width - 8 + "px";
+        if (r.bottom > window.innerHeight - 8)
+          menuEl.style.top = btnRect.top - r.height - 4 + "px";
+      });
 
       const onOutside = (ev: MouseEvent) => {
         if (!menuEl?.contains(ev.target as Node)) {
