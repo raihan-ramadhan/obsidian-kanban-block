@@ -1583,17 +1583,25 @@ class KanbanRenderer extends MarkdownRenderChild {
 
       // Position dropdown
       colMenuEl.style.position = "fixed";
+      colMenuEl.style.visibility = "hidden";
       document.body.appendChild(colMenuEl);
       const btnRect = gripBtn.getBoundingClientRect();
-      colMenuEl.style.top = btnRect.bottom + 4 + "px";
       colMenuEl.style.left = btnRect.left + "px";
       colMenuEl.style.right = "auto";
 
-      // Clamp to viewport, then position color picker
+      // Flip up/down and clamp horizontal, then position color picker
       requestAnimationFrame(() => {
         const r = colMenuEl!.getBoundingClientRect();
-        if (r.right > window.innerWidth)
-          colMenuEl!.style.left = btnRect.right - r.width + "px";
+        const spaceBelow = window.innerHeight - btnRect.bottom - 8;
+        const spaceAbove = btnRect.top - 8;
+        if (spaceBelow >= r.height || spaceBelow >= spaceAbove) {
+          colMenuEl!.style.top = btnRect.bottom + 4 + "px";
+        } else {
+          colMenuEl!.style.top = btnRect.top - r.height - 4 + "px";
+        }
+        if (r.right > window.innerWidth - 8)
+          colMenuEl!.style.left = window.innerWidth - r.width - 8 + "px";
+        colMenuEl!.style.visibility = "visible";
         positionPicker();
       });
 
@@ -2411,18 +2419,26 @@ class KanbanRenderer extends MarkdownRenderChild {
 
       const btnRect = menuBtn.getBoundingClientRect();
       menuEl.style.position = "fixed";
+      menuEl.style.visibility = "hidden";
       document.body.appendChild(menuEl);
-      menuEl.style.top = btnRect.bottom + 4 + "px";
-      menuEl.style.left = btnRect.left + "px";
-      menuEl.style.right = "auto";
       requestAnimationFrame(() => {
         if (!menuEl) return;
         const r = menuEl.getBoundingClientRect();
-        // Default bottom-left; flip right if overflow right edge
-        if (r.right > window.innerWidth - 8)
-          menuEl.style.left = window.innerWidth - r.width - 8 + "px";
-        if (r.bottom > window.innerHeight - 8)
+        // Vertical: open below, flip up if not enough space
+        const spaceBelow = window.innerHeight - btnRect.bottom - 8;
+        const spaceAbove = btnRect.top - 8;
+        if (spaceBelow >= r.height || spaceBelow >= spaceAbove) {
+          menuEl.style.top = btnRect.bottom + 4 + "px";
+        } else {
           menuEl.style.top = btnRect.top - r.height - 4 + "px";
+        }
+        // Horizontal: align left, flip if overflow right
+        menuEl.style.left = btnRect.left + "px";
+        menuEl.style.right = "auto";
+        if (btnRect.left + r.width > window.innerWidth - 8) {
+          menuEl.style.left = window.innerWidth - r.width - 8 + "px";
+        }
+        menuEl.style.visibility = "visible";
       });
 
       const onOutside = (ev: MouseEvent) => {
@@ -3154,14 +3170,25 @@ class KanbanRenderer extends MarkdownRenderChild {
 
   private positionToolbarMenu(menu: HTMLElement, anchor: HTMLElement) {
     menu.style.position = "fixed";
+    menu.style.visibility = "hidden";
     document.body.appendChild(menu);
     const r = anchor.getBoundingClientRect();
-    menu.style.top = r.bottom + 4 + "px";
     menu.style.right = window.innerWidth - r.right + "px";
     menu.style.left = "auto";
     requestAnimationFrame(() => {
       const mr = menu.getBoundingClientRect();
-      if (mr.left < 4) menu.style.left = "4px";
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      const spaceAbove = r.top - 8;
+      if (spaceBelow >= mr.height || spaceBelow >= spaceAbove) {
+        menu.style.top = r.bottom + 4 + "px";
+      } else {
+        menu.style.top = r.top - mr.height - 4 + "px";
+      }
+      if (mr.left < 4) {
+        menu.style.right = "auto";
+        menu.style.left = "4px";
+      }
+      menu.style.visibility = "visible";
     });
     const onEsc = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") {
