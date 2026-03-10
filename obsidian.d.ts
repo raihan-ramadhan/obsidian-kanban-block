@@ -97,4 +97,9 @@ declare module "obsidian" {
   }
 
   function setIcon(el: HTMLElement, iconId: string): void;
+  function setTooltip(
+    el: HTMLElement,
+    tooltip: string,
+    options?: { placement?: string },
+  ): void;
 }

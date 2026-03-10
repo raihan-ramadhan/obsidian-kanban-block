@@ -7,6 +7,7 @@ import {
   Menu,
   MenuItem,
   setIcon,
+  setTooltip,
 } from "obsidian";
 
 // ─── Icon helper ─────────────────────────────────────────────────────────────
@@ -815,7 +816,7 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // Search — icon button, expands to input on click
     const searchWrap = div("kanban-search-wrap");
-    const searchIconEl = el("span", { cls: "kanban-search-icon-el" });
+    const searchIconEl = el("button", { cls: "kanban-search-icon-el" });
     si(searchIconEl, "search");
     const searchInput = el("input", {
       cls: "kanban-search-input",
@@ -823,6 +824,8 @@ class KanbanRenderer extends MarkdownRenderChild {
     }) as HTMLInputElement;
     const clearBtn = el("button", { cls: "kanban-search-clear" });
     si(clearBtn, "x");
+    setTooltip(clearBtn, "Clear search");
+    setTooltip(searchIconEl, "Search");
 
     let searchOpen = false;
     const openSearch = () => {
@@ -843,6 +846,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       e.stopPropagation();
       this.searchQuery = "";
       searchInput.value = "";
+      searchWrap.classList.remove("kanban-search-has-query");
       if (this.boardEl) this.applyFilters(this.boardEl);
       closeSearch();
     });
@@ -872,14 +876,14 @@ class KanbanRenderer extends MarkdownRenderChild {
     // Sort button
     const sortBtn = el("button", { cls: "kanban-toolbar-btn" });
     si(sortBtn, "arrow-up-down");
-    sortBtn.title = "Sort";
+    setTooltip(sortBtn, "Sort");
     sortBtn.addEventListener("click", (e) => this.showSortMenu(e, sortBtn));
     toolbarRight.appendChild(sortBtn);
 
     // Filter button
     const filterBtn = el("button", { cls: "kanban-toolbar-btn" });
     si(filterBtn, "filter");
-    filterBtn.title = "Filter";
+    setTooltip(filterBtn, "Filter");
     filterBtn.addEventListener("click", (e) =>
       this.showFilterMenu(e, filterBtn),
     );
@@ -888,14 +892,14 @@ class KanbanRenderer extends MarkdownRenderChild {
     // Properties button
     const propsBtn = el("button", { cls: "kanban-toolbar-btn" });
     si(propsBtn, "layout-list");
-    propsBtn.title = "Properties";
+    setTooltip(propsBtn, "Properties");
     propsBtn.addEventListener("click", (e) => this.showPropsMenu(e, propsBtn));
     toolbarRight.appendChild(propsBtn);
 
     // Directives button
     const directivesBtn = el("button", { cls: "kanban-toolbar-btn" });
     si(directivesBtn, "settings");
-    directivesBtn.title = "Directives";
+    setTooltip(directivesBtn, "Directives");
     directivesBtn.addEventListener("click", () => this.showDirectivesModal());
     toolbarRight.appendChild(directivesBtn);
 
@@ -1084,7 +1088,7 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // ── + Add Card button in header ──
     const headerAddBtn = el("button", { cls: "kanban-header-add-btn" });
-    headerAddBtn.title = "Add card";
+    setTooltip(headerAddBtn, "Add card");
     si(headerAddBtn, "plus");
 
     // Apply adaptive foreground to all header icon buttons when column has bgColor
@@ -1145,7 +1149,7 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // ── Column options button (⋯) — replaces grip ────────────────────────────
     const gripBtn = el("button", { cls: "kanban-grip-btn" });
-    gripBtn.title = "Column options";
+    setTooltip(gripBtn, "Column options");
     si(gripBtn, "more-horizontal");
     if (col.bgColor) {
       const fg = adaptiveForeground(col.bgColor);
@@ -1647,7 +1651,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     // ── Single ⋯ menu button ─────────────────────────────────────────────────
     const menuBtn = el("button", { cls: "kanban-card-menu-btn" });
     si(menuBtn, "more-horizontal");
-    menuBtn.title = "Card options";
+    setTooltip(menuBtn, "Card options");
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     // Full path to the _kanban-notes (or custom) folder for this kanban file
@@ -2197,7 +2201,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     const isWikilinkCard = !!extractWikilink(card.text);
     const quickEditBtn = el("button", { cls: "kanban-card-quick-edit-btn" });
     si(quickEditBtn, "pencil");
-    quickEditBtn.title = isWikilinkCard ? "Rename note..." : "Edit card";
+    setTooltip(quickEditBtn, isWikilinkCard ? "Rename note..." : "Edit card");
     quickEditBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (isWikilinkCard) {
@@ -2935,16 +2939,16 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-toolbar-btn.active{background:var(--interactive-accent)!important;color:#fff!important;border-color:var(--interactive-accent)!important}
       .kanban-toolbar-new-col-btn{display:flex;align-items:center;gap:5px;background:var(--interactive-accent)!important;color:#fff!important;border:none!important;border-radius:6px;padding:0 10px;height:28px;font-size:.82em;font-weight:600;cursor:pointer;white-space:nowrap;transition:opacity .15s;box-shadow:none!important}.kanban-toolbar-new-col-btn:hover{opacity:.88}
       .kanban-toolbar-new-col-icon{display:flex;align-items:center}.kanban-toolbar-new-col-icon svg{width:13px;height:13px}
-      .kanban-search-wrap{display:flex;align-items:center;gap:0;height:28px;border:1px solid var(--background-modifier-border);border-radius:6px;cursor:pointer;padding:0 6px;transition:background .15s;box-sizing:border-box}
+      .kanban-search-wrap{position:relative;display:flex;align-items:center;gap:0;height:28px;border:1px solid var(--background-modifier-border);border-radius:6px;cursor:pointer;transition:background .15s;box-sizing:border-box}
       .kanban-search-wrap:hover{background:var(--background-modifier-hover)}
       .kanban-search-wrap.kanban-search-open{background:var(--background-secondary);cursor:default}
-      .kanban-search-icon-el{display:flex;align-items:center;flex-shrink:0;color:var(--text-muted)}.kanban-search-icon-el svg{width:14px;height:14px}
+      .kanban-search-icon-el{cursor:pointer;width:28px;height:28px;background:transparent!important;padding:0!important;border:none!important;box-shadow:none!important;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-muted)}.kanban-search-icon-el svg{width:14px;height:14px}
       .kanban-search-input{width:0;height:100%;background:transparent!important;border:none!important;outline:none!important;box-shadow:none!important;color:var(--text-normal);font-size:.85em;padding:0!important;margin:0;transition:width .2s ease;overflow:hidden;caret-color:var(--text-accent)}
       .kanban-search-input::placeholder{color:var(--text-muted)}
-      .kanban-search-open .kanban-search-input{width:140px;padding:0!important;margin-left:5px}
-      .kanban-search-clear{display:none;align-items:center;justify-content:center;background:transparent!important;border:none!important;box-shadow:none!important;color:var(--text-muted);cursor:pointer;padding:0;width:16px;height:16px;flex-shrink:0;border-radius:50%}.kanban-search-clear svg{width:12px;height:12px}
+      .kanban-search-open .kanban-search-input{width:140px;padding-right:16px!important;margin-left:5px}
+      .kanban-search-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;background:transparent!important;border:none!important;box-shadow:none!important;color:var(--text-muted);cursor:pointer;padding:0;width:16px;height:16px;border-radius:50%;opacity:0;pointer-events:none;transition:opacity .15s ease}.kanban-search-clear svg{width:12px;height:12px}
       .kanban-search-clear:hover{color:var(--text-normal)}
-      .kanban-search-has-query .kanban-search-clear{display:flex}
+      .kanban-search-has-query .kanban-search-clear{opacity:1;pointer-events:auto}
       .kanban-highlight{background:rgba(255,213,0,.45);border-radius:2px;padding:0 1px;color:inherit}
       .kanban-search-empty{text-align:center;color:var(--text-muted);font-size:.8em;padding:10px 0;font-style:italic}
       .kanban-card-link{color:var(--link-color, var(--interactive-accent));text-decoration:underline;cursor:pointer;font-size:inherit;background:none;border:none;padding:0}
