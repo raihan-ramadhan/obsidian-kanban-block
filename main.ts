@@ -3278,6 +3278,47 @@ class KanbanRenderer extends MarkdownRenderChild {
     });
     menu.appendChild(copyItem);
 
+    menu.appendChild(mkSep());
+
+    // ── Delete Kanban Block ───────────────────────────────────────────────────
+    const deleteBlockItem = mkItem(
+      "trash-2",
+      "Delete Kanban Block",
+      "kanban-ctx-item-danger",
+    );
+    deleteBlockItem.addEventListener("click", async () => {
+      menu.remove();
+      const confirmed = await kanbanConfirm(
+        `Delete this entire Kanban block? This cannot be undone.`,
+        this.containerEl as HTMLElement,
+        "Delete",
+        true,
+      );
+      if (!confirmed) return;
+
+      const file = this.obsApp.vault.getFileByPath(this.ctx.sourcePath);
+      if (!file) return;
+      const fileContent = await this.obsApp.vault.read(file);
+      const sectionInfo = this.ctx.getSectionInfo(this.containerEl);
+      let newContent: string;
+
+      if (sectionInfo) {
+        const lines = fileContent.split("\n");
+        // Remove from opening fence to closing fence (inclusive)
+        const before = lines.slice(0, sectionInfo.lineStart).join("\n");
+        const after = lines.slice(sectionInfo.lineEnd + 1).join("\n");
+        newContent = before + (before && after ? "\n" : "") + after;
+      } else {
+        newContent = fileContent.replace(
+          /```kanban\r?\n[\s\S]*?\r?\n```\n?/,
+          "",
+        );
+      }
+
+      await this.obsApp.vault.modify(file, newContent);
+    });
+    menu.appendChild(deleteBlockItem);
+
     // Position and show
     menu.style.position = "fixed";
     menu.style.left = e.clientX + "px";
@@ -3561,6 +3602,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-ghost-pill:hover .kanban-ghost-badge{opacity:1;transform:scale(1.1)}
       .kanban-ctx-menu{background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:8px;padding:4px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:99999}
       .kanban-ctx-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:5px;cursor:pointer;font-size:.88em;color:var(--text-normal);transition:background .1s}
+      .kanban-ctx-item-danger{color:#e74c3c!important}.kanban-ctx-item-danger:hover{background:rgba(231,76,60,.12)!important}
       .kanban-ctx-item:hover{background:var(--background-modifier-hover)}
       .kanban-ctx-item.kanban-ctx-danger{color:#e74c3c}
       .kanban-ctx-icon{display:flex;align-items:center;justify-content:center;width:16px;height:16px;flex-shrink:0}.kanban-ctx-icon svg{width:14px;height:14px}
