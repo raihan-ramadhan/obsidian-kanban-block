@@ -2504,7 +2504,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     if (this.selectMode) {
       // In select mode: show checkbox, hide pencil+menu
       checkbox.style.cssText =
-        "display:block!important;position:absolute!important;top:7px!important;right:7px!important;left:auto!important;width:14px!important;height:14px!important;margin:0!important;z-index:2";
+        "display:block!important;position:absolute!important;top:6px!important;right:6px!important;left:auto!important;width:22px!important;height:22px!important;margin:0!important;z-index:2";
       cardEl.appendChild(checkbox);
       // Don't append quickEditBtn and menuBtn
     } else {
@@ -3479,7 +3479,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-modal-error{margin:4px 0 0;font-size:.8em;color:#e74c3c}
       .kanban-modal-check-row{display:flex;align-items:center;gap:6px;font-size:.85em;color:var(--text-normal);cursor:pointer;padding:4px 0;user-select:none}
       .kanban-modal-checkbox{cursor:pointer;accent-color:var(--interactive-accent)}
-      .kanban-card-checkbox{display:none;position:absolute;top:7px;right:7px;width:14px;height:14px;margin:0;cursor:pointer;accent-color:var(--interactive-accent);z-index:2}
+      .kanban-card-checkbox{display:none;position:absolute;top:6px;right:6px;width:22px;height:22px;margin:0;cursor:pointer;accent-color:var(--interactive-accent);z-index:2}
       .kanban-toolbar-btn-active{background:var(--interactive-accent)!important;color:#fff!important;border-color:var(--interactive-accent)!important}
       .kanban-toolbar-btn-active:hover{background:var(--interactive-accent)!important;color:#fff!important;opacity:.88}
       .kanban-select-btn{display:flex;align-items:center;gap:5px;padding:0 10px!important;width:auto!important}
