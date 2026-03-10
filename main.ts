@@ -1156,7 +1156,7 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // No add-column button at end of board — moved to toolbar
 
-    // ── Column live reorder on dragover ─────────────────────────────────────
+    // ── Column live reorder on dragover with FLIP animation ────────────────
     board.addEventListener("dragover", (e) => {
       if (!this.draggingColId) return;
       e.preventDefault();
@@ -1167,9 +1167,10 @@ class KanbanRenderer extends MarkdownRenderChild {
       );
       if (!draggingEl) return;
 
-      const cols = Array.from(
+      const allCols = Array.from(
         board.querySelectorAll<HTMLElement>(".kanban-column"),
-      ).filter((c) => c !== draggingEl);
+      );
+      const cols = allCols.filter((c) => c !== draggingEl);
 
       let insertBefore: HTMLElement | null = null;
       for (const c of cols) {
@@ -1180,17 +1181,43 @@ class KanbanRenderer extends MarkdownRenderChild {
         }
       }
 
-      // Live reorder: move dragging column in DOM immediately
+      // Check if reorder is needed
+      const willChange = insertBefore
+        ? draggingEl.nextElementSibling !== insertBefore
+        : draggingEl.nextElementSibling !== null;
+
+      if (!willChange) return;
+
+      // FLIP — record positions BEFORE reorder
+      const first = new Map<HTMLElement, DOMRect>();
+      allCols.forEach((c) => {
+        if (c !== draggingEl) first.set(c, c.getBoundingClientRect());
+      });
+
+      // Reorder DOM
       if (insertBefore) {
-        if (draggingEl.nextElementSibling !== insertBefore) {
-          board.insertBefore(draggingEl, insertBefore);
-        }
+        board.insertBefore(draggingEl, insertBefore);
       } else {
-        // Move to end
-        if (draggingEl.nextElementSibling !== null) {
-          board.appendChild(draggingEl);
-        }
+        board.appendChild(draggingEl);
       }
+
+      // FLIP — record positions AFTER reorder, then invert+play
+      allCols.forEach((c) => {
+        if (c === draggingEl) return;
+        const f = first.get(c);
+        if (!f) return;
+        const l = c.getBoundingClientRect();
+        const dx = f.left - l.left;
+        if (Math.abs(dx) < 1) return;
+        // Cancel any ongoing animation
+        c.style.transition = "none";
+        c.style.transform = `translateX(${dx}px)`;
+        requestAnimationFrame(() => {
+          c.style.transition =
+            "transform 0.18s cubic-bezier(0.25,0.46,0.45,0.94)";
+          c.style.transform = "translateX(0)";
+        });
+      });
     });
 
     board.addEventListener("dragleave", (e) => {
@@ -1316,6 +1343,11 @@ class KanbanRenderer extends MarkdownRenderChild {
       headerDragStarted = false;
       colEl.classList.remove("kanban-col-dragging");
       this.draggingColId = null;
+      // Clean up any leftover FLIP transforms on all columns
+      board.querySelectorAll<HTMLElement>(".kanban-column").forEach((c) => {
+        c.style.transition = "none";
+        c.style.transform = "";
+      });
     });
 
     // ── Double-click on header → rename panel ───────────────────────────────
@@ -3458,7 +3490,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-header-add-btn{background:transparent!important;border:none;color:var(--text-muted);cursor:pointer;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,color .15s ease;box-shadow:none!important;width:24px;height:24px;flex-shrink:0}.kanban-header-add-btn svg{width:15px;height:15px}
       .kanban-header-add-btn:hover{background:var(--background-modifier-hover)!important}
       .kanban-column-header:active{cursor:grabbing}
-      .kanban-col-dragging{opacity:.5;outline:2px dashed var(--interactive-accent);outline-offset:2px;border-radius:10px}
+      .kanban-col-dragging{opacity:.5!important;cursor:grabbing!important;transform:scale(0.97);box-shadow:0 8px 24px rgba(0,0,0,.18)!important;z-index:100;position:relative;transition:none!important}
       .kanban-grip-btn{background:transparent!important;border:none;color:var(--text-muted);cursor:pointer;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,color .15s ease;box-shadow:none!important;width:24px;height:24px;flex-shrink:0}.kanban-grip-btn svg{width:15px;height:15px}
       .kanban-grip-btn:hover{color:var(--text-normal)!important;background:var(--background-modifier-hover)!important}
       .kanban-cards-wrapper{position:relative;border-radius:6px}.kanban-cards-wrapper.kanban-cards-shadow::after{content:'';position:absolute;bottom:0;left:0;right:0;height:32px;border-radius:0 0 6px 6px;background:linear-gradient(to bottom,transparent,rgba(0,0,0,0.13));pointer-events:none;z-index:1}.kanban-cards{display:flex;flex-direction:column;gap:7px;min-height:40px;border-radius:6px;padding:2px;transition:background .15s}.kanban-cards::-webkit-scrollbar{display:none}.kanban-cards{scrollbar-width:none;-ms-overflow-style:none}
