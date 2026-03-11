@@ -84,7 +84,7 @@ function parseKanban(source: string): KanbanColumn[] {
     if (
       MAX_HEIGHT_RE.test(trimmed) ||
       COL_WIDTH_RE.test(trimmed) ||
-      PAGES_FOLDER_RE.test(trimmed) ||
+      NOTES_FOLDER_RE.test(trimmed) ||
       VERSION_RE.test(trimmed)
     )
       continue;
@@ -510,7 +510,7 @@ function serializeKanban(
       (l) =>
         !MAX_HEIGHT_RE.test(l.trim()) &&
         !COL_WIDTH_RE.test(l.trim()) &&
-        !PAGES_FOLDER_RE.test(l.trim()) &&
+        !NOTES_FOLDER_RE.test(l.trim()) &&
         !VERSION_RE.test(l.trim()),
     )
     .join("\n");
@@ -542,9 +542,9 @@ function extractSourceHeader(source: string): string | undefined {
       }
     }
     if (!seenPF) {
-      const pf = line.match(PAGES_FOLDER_RE);
-      if (pf) {
-        tokens.push(pf[0].trim());
+      const nf = line.match(NOTES_FOLDER_RE);
+      if (nf) {
+        tokens.push(nf[0].trim());
         seenPF = true;
       }
     }
@@ -705,17 +705,17 @@ function parseColWidth(source: string): string {
   return DEFAULT_COL_WIDTH;
 }
 
-const DEFAULT_PAGES_FOLDER = "_kanban-notes";
+const DEFAULT_NOTES_FOLDER = "_kanban-notes";
 
-// Matches [pagesFolder:_my-pages], [pagesfolder: notes], etc.
-const PAGES_FOLDER_RE = /\[\s*pagesFolder\s*:\s*([^\]]+?)\s*\]/i;
+// Matches [notesFolder:_my-notes], [notesfolder: notes], etc.
+const NOTES_FOLDER_RE = /\[\s*notesFolder\s*:\s*([^\]]+?)\s*\]/i;
 
-function parsePagesFolder(source: string): string {
+function parseNotesFolder(source: string): string {
   for (const line of source.split("\n")) {
-    const match = line.match(PAGES_FOLDER_RE);
+    const match = line.match(NOTES_FOLDER_RE);
     if (match) return match[1].trim();
   }
-  return DEFAULT_PAGES_FOLDER;
+  return DEFAULT_NOTES_FOLDER;
 }
 
 // ── Sort directive [s:title-asc] ─────────────────────────────────────────────
@@ -1776,10 +1776,14 @@ class KanbanRenderer extends MarkdownRenderChild {
       // Resolve file — pages folder first, then legacy fallback
       const resolveWikiFile = () => {
         const kf = getFolderPath(this.ctx.sourcePath);
-        const sub = parsePagesFolder(this.source);
-        const pf = kf ? `${kf}/${sub}` : sub;
+        const sub = parseNotesFolder(this.source);
+        const nf = sub.startsWith("/")
+          ? sub.slice(1)
+          : kf
+            ? `${kf}/${sub}`
+            : sub;
         const inPages = this.obsApp.vault.getFileByPath(
-          `${pf}/${wikilinkTarget}.md`,
+          `${nf}/${wikilinkTarget}.md`,
         );
         if (inPages) return inPages;
         const legacy = kf
@@ -1829,12 +1833,14 @@ class KanbanRenderer extends MarkdownRenderChild {
         const createPage = async (e: MouseEvent) => {
           e.stopPropagation();
           const kf = getFolderPath(this.ctx.sourcePath);
-          const sub = parsePagesFolder(this.source);
-          const pagesFolder = kf ? `${kf}/${sub}` : sub;
-          if (!this.obsApp.vault.getAbstractFileByPath(pagesFolder)) {
-            await this.obsApp.vault.createFolder(pagesFolder);
-          }
-          const filePath = `${pagesFolder}/${wikilinkTarget}.md`;
+          const sub = parseNotesFolder(this.source);
+          const notesFolder = sub.startsWith("/")
+            ? sub.slice(1)
+            : kf
+              ? `${kf}/${sub}`
+              : sub;
+          await this.ensureFolderPath(notesFolder);
+          const filePath = `${notesFolder}/${wikilinkTarget}.md`;
           await this.obsApp.vault.create(filePath, `# ${wikilinkTarget}\n`);
           const newFile = this.obsApp.vault.getFileByPath(filePath);
           if (newFile) {
@@ -1878,24 +1884,19 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     // Full path to the _kanban-notes (or custom) folder for this kanban file
-    const getPagesFolder = () => {
+    const getNotesFolder = () => {
+      const subFolder = parseNotesFolder(this.source);
+      // Absolute path: starts with / → relative to vault root
+      if (subFolder.startsWith("/")) return subFolder.slice(1);
+      // Relative path: resolve relative to kanban file location
       const kanbanFolder = getFolderPath(this.ctx.sourcePath);
-      const subFolder = parsePagesFolder(this.source);
       return kanbanFolder ? `${kanbanFolder}/${subFolder}` : subFolder;
     };
 
     const getLinkedFile = () => {
       const wt = extractWikilink(card.text);
       if (!wt) return null;
-      // Check pages folder first, then fallback to kanban folder (legacy)
-      const pagesFolder = getPagesFolder();
-      const inPages = this.obsApp.vault.getFileByPath(
-        `${pagesFolder}/${wt}.md`,
-      );
-      if (inPages) return inPages;
-      const kanbanFolder = getFolderPath(this.ctx.sourcePath);
-      const legacy = kanbanFolder ? `${kanbanFolder}/${wt}.md` : `${wt}.md`;
-      return this.obsApp.vault.getFileByPath(legacy);
+      return this.resolveWikiFile(wt, getNotesFolder());
     };
 
     // ── Action handlers ───────────────────────────────────────────────────────
@@ -2021,12 +2022,10 @@ class KanbanRenderer extends MarkdownRenderChild {
       if (!filename) return;
 
       // Ensure pages folder exists
-      const pagesFolder = getPagesFolder();
-      if (!this.obsApp.vault.getAbstractFileByPath(pagesFolder)) {
-        await this.obsApp.vault.createFolder(pagesFolder);
-      }
+      const notesFolder = getNotesFolder();
+      await this.ensureFolderPath(notesFolder);
 
-      const filePath = `${pagesFolder}/${filename}.md`;
+      const filePath = `${notesFolder}/${filename}.md`;
 
       // Case-insensitive search for existing file in pages folder
       // Case-insensitive file lookup: check exact path first, then scan folder
@@ -2036,7 +2035,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       } | null;
       if (!existingFile) {
         const folder = this.obsApp.vault.getAbstractFileByPath(
-          pagesFolder,
+          notesFolder,
         ) as any;
         const children: { path: string; name: string }[] =
           folder?.children ?? [];
@@ -2360,13 +2359,15 @@ class KanbanRenderer extends MarkdownRenderChild {
           e.stopPropagation();
           closeMenu();
           const kf = getFolderPath(this.ctx.sourcePath);
-          const sub = parsePagesFolder(this.source);
-          const pagesFolder = kf ? `${kf}/${sub}` : sub;
+          const sub = parseNotesFolder(this.source);
+          const notesFolder = sub.startsWith("/")
+            ? sub.slice(1)
+            : kf
+              ? `${kf}/${sub}`
+              : sub;
           (async () => {
-            if (!this.obsApp.vault.getAbstractFileByPath(pagesFolder)) {
-              await this.obsApp.vault.createFolder(pagesFolder);
-            }
-            const filePath = `${pagesFolder}/${wikilinkText}.md`;
+            await this.ensureFolderPath(notesFolder);
+            const filePath = `${notesFolder}/${wikilinkText}.md`;
             await this.obsApp.vault.create(filePath, `# ${wikilinkText}\n`);
             const newFile = this.obsApp.vault.getFileByPath(filePath);
             if (newFile) {
@@ -2763,11 +2764,54 @@ class KanbanRenderer extends MarkdownRenderChild {
     }
   }
 
+  /**
+   * Resolve a wikilink target to a TFile.
+   * Search order:
+   *   1. notesFolder/wt.md  (configured folder)
+   *   2. kanban folder/wt.md (legacy)
+   *   3. vault root/wt.md
+   *   4. Vault-wide: any file whose name matches wt.md (first match)
+   */
+  /** Create a folder and all parent folders if they don't exist */
+  private async ensureFolderPath(folderPath: string) {
+    const parts = folderPath.split("/").filter(Boolean);
+    let current = "";
+    for (const part of parts) {
+      current = current ? `${current}/${part}` : part;
+      if (!this.obsApp.vault.getAbstractFileByPath(current)) {
+        await this.obsApp.vault.createFolder(current);
+      }
+    }
+  }
+
+  private resolveWikiFile(wt: string, notesFolder: string) {
+    // 1. notesFolder
+    const inNotes = this.obsApp.vault.getFileByPath(`${notesFolder}/${wt}.md`);
+    if (inNotes) return inNotes;
+    // 2. Legacy: same folder as kanban file
+    const kf = getFolderPath(this.ctx.sourcePath);
+    if (kf) {
+      const inKanban = this.obsApp.vault.getFileByPath(`${kf}/${wt}.md`);
+      if (inKanban) return inKanban;
+    }
+    // 3. Vault root
+    const atRoot = this.obsApp.vault.getFileByPath(`${wt}.md`);
+    if (atRoot) return atRoot;
+    // 4. Vault-wide search by filename
+    const filename = wt.includes("/") ? wt.split("/").pop()! : wt;
+    const allFiles = this.obsApp.vault.getMarkdownFiles();
+    return (
+      allFiles.find(
+        (f) => f.name === `${filename}.md` || f.name === `${wt}.md`,
+      ) ?? null
+    );
+  }
+
   private getLinkedFileByName(wt: string) {
     const kf = getFolderPath(this.ctx.sourcePath);
-    const sub = parsePagesFolder(this.source);
-    const pf = kf ? `${kf}/${sub}` : sub;
-    const inPages = this.obsApp.vault.getFileByPath(`${pf}/${wt}.md`);
+    const sub = parseNotesFolder(this.source);
+    const nf = sub.startsWith("/") ? sub.slice(1) : kf ? `${kf}/${sub}` : sub;
+    const inPages = this.obsApp.vault.getFileByPath(`${nf}/${wt}.md`);
     if (inPages) return inPages;
     const legacy = kf ? `${kf}/${wt}.md` : `${wt}.md`;
     return this.obsApp.vault.getFileByPath(legacy);
@@ -3375,7 +3419,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     // Parse current values
     const curMaxHeight = parseMaxHeight(this.source);
     const curColWidth = parseColWidth(this.source);
-    const curPagesFolder = parsePagesFolder(this.source);
+    const curNotesFolder = parseNotesFolder(this.source);
 
     // Build modal
     const backdrop = document.createElement("div");
@@ -3419,15 +3463,15 @@ class KanbanRenderer extends MarkdownRenderChild {
       curColWidth,
       "e.g. 240px",
     );
-    const { wrap: pfWrap, inp: pfInp } = mkField(
-      "Pages Folder",
-      curPagesFolder,
-      "e.g. _kanban-notes",
+    const { wrap: nfWrap, inp: nfInp } = mkField(
+      "Notes Folder",
+      curNotesFolder,
+      "e.g. _kanban-notes or /Database/Clients",
     );
 
     modal.appendChild(mhWrap);
     modal.appendChild(cwWrap);
-    modal.appendChild(pfWrap);
+    modal.appendChild(nfWrap);
 
     const btnRow = document.createElement("div");
     btnRow.className = "kanban-modal-btns";
@@ -3449,15 +3493,15 @@ class KanbanRenderer extends MarkdownRenderChild {
           (l: string) =>
             !MAX_HEIGHT_RE.test(l.trim()) &&
             !COL_WIDTH_RE.test(l.trim()) &&
-            !PAGES_FOLDER_RE.test(l.trim()) &&
+            !NOTES_FOLDER_RE.test(l.trim()) &&
             !VERSION_RE.test(l.trim()),
         )
         .join("\n");
 
       const mh = mhInp.value.trim() || DEFAULT_MAX_HEIGHT;
       const cw = cwInp.value.trim() || DEFAULT_COL_WIDTH;
-      const pf = pfInp.value.trim() || DEFAULT_PAGES_FOLDER;
-      const newHeader = `[v:${CURRENT_FORMAT_VERSION}][maxHeight:${mh}][columnWidth:${cw}][pagesFolder:${pf}]`;
+      const nf = nfInp.value.trim() || DEFAULT_NOTES_FOLDER;
+      const newHeader = `[v:${CURRENT_FORMAT_VERSION}][maxHeight:${mh}][columnWidth:${cw}][notesFolder:${nf}]`;
       newSource = newHeader + "\n" + newSource.trimStart();
 
       this.source = newSource;
