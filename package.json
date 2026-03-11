@@ -1,6 +1,6 @@
 {
   "name": "obsidian-kanban-block",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Kanban board as a code block in Obsidian",
   "main": "main.js",
   "scripts": {
