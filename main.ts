@@ -2985,14 +2985,26 @@ class KanbanRenderer extends MarkdownRenderChild {
         if (matches && q) {
           const regex = new RegExp(`(${escapeRegex(q)})`, "gi");
           const linkEl = textEl.querySelector<HTMLElement>(".kanban-card-link");
+          const ghostNameEl =
+            textEl.querySelector<HTMLElement>(".kanban-ghost-name");
           if (linkEl) {
+            // Existing linked note — highlight link text only
             if (!linkEl.dataset.plainLinkText)
               linkEl.dataset.plainLinkText = linkEl.textContent ?? "";
             linkEl.innerHTML = linkEl.dataset.plainLinkText.replace(
               regex,
               '<mark class="kanban-highlight">$1</mark>',
             );
+          } else if (ghostNameEl) {
+            // Ghost card — highlight only the name span, not the whole pill HTML
+            if (!ghostNameEl.dataset.plainText)
+              ghostNameEl.dataset.plainText = ghostNameEl.textContent ?? "";
+            ghostNameEl.innerHTML = ghostNameEl.dataset.plainText.replace(
+              regex,
+              '<mark class="kanban-highlight">$1</mark>',
+            );
           } else {
+            // Plain card — safe to replace innerHTML
             if (!textEl.dataset.plainHtml)
               textEl.dataset.plainHtml = textEl.innerHTML;
             textEl.innerHTML = (textEl.dataset.plainHtml ?? plainText).replace(
@@ -3001,14 +3013,17 @@ class KanbanRenderer extends MarkdownRenderChild {
             );
           }
         } else {
-          // Restore highlights only — never overwrite wikilink/ghost DOM
+          // Restore
           const linkEl = textEl.querySelector<HTMLElement>(".kanban-card-link");
+          const ghostNameEl =
+            textEl.querySelector<HTMLElement>(".kanban-ghost-name");
           if (linkEl && linkEl.dataset.plainLinkText) {
-            linkEl.textContent = linkEl.dataset.plainLinkText;
+            linkEl.innerHTML = linkEl.dataset.plainLinkText;
+          } else if (ghostNameEl && ghostNameEl.dataset.plainText) {
+            ghostNameEl.innerHTML = ghostNameEl.dataset.plainText;
           } else if (textEl.dataset.plainHtml) {
             textEl.innerHTML = textEl.dataset.plainHtml;
           }
-          // If neither — card was never highlighted, nothing to restore
         }
 
         if (matches) visibleCount++;
