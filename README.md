@@ -7,6 +7,48 @@ An Obsidian plugin that renders interactive Kanban boards directly inside fenced
 
 ---
 
+## Installation
+
+### From Obsidian Community Plugins _(coming soon)_
+
+1. Open **Settings → Community Plugins → Browse**
+2. Search for **Kanban Block**
+3. Click **Install** then **Enable**
+
+### Manual Install
+
+If you want to install directly from the source:
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/raihan-ramadhan/obsidian-kanban-block.git
+cd obsidian-kanban-block
+
+# 2. Install dependencies and build
+npm install
+npm run build
+```
+
+Then copy these three files into your vault's plugin folder:
+
+```
+main.js
+manifest.json
+styles.css
+```
+
+The plugin folder location depends on your OS:
+
+| OS      | Path                                                          |
+| ------- | ------------------------------------------------------------- |
+| Windows | `C:\Users\<name>\<YourVault>\.obsidian\plugins\kanban-block\` |
+| macOS   | `/Users/<name>/<YourVault>/.obsidian/plugins/kanban-block/`   |
+| Linux   | `/home/<name>/<YourVault>/.obsidian/plugins/kanban-block/`    |
+
+After copying, go to **Settings → Community Plugins**, disable Safe Mode if prompted, then enable **Kanban Block**.
+
+---
+
 ## Quick Start
 
 Create a code block with the language set to `kanban`:
