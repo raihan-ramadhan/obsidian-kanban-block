@@ -222,6 +222,38 @@ Paths **with** a leading `/` are always resolved from the vault root, regardless
 
 ---
 
+## What Could Be Next
+
+Kanban Block is currently a focused, self-contained tool — and it works well for that. But there's a lot of room to grow. Here are ideas that could make it something much more powerful:
+
+**Linked Kanban Files**
+Instead of living only inside a code block, a kanban could be its own `.kanban.md` file — and multiple notes could embed or reference the same board. Changes in one place reflect everywhere.
+
+**Insert Existing Kanban**
+A command to insert a kanban block with a picker to choose from existing boards in your vault — no more copy-pasting.
+
+**Multiple Views**
+Switch between Kanban, List, Grid, and Table views for the same underlying data. Same cards, different layout — depending on what you need at that moment.
+
+**Due Dates**
+Assign a due date to any card. Cards near or past their deadline get a visual indicator. A timeline or calendar view could follow from this.
+
+**Priority Levels**
+Mark cards as low / medium / high priority. Filter and sort by priority. Color-code automatically.
+
+**Custom Properties**
+Define your own fields per board — status, assignee, estimate, URL, or anything else. Linked note cards could sync properties with the file's frontmatter.
+
+**Recurring Cards**
+Cards that automatically reappear on a schedule — useful for weekly reviews, habits, or repeated tasks.
+
+**Board Templates**
+Save a board layout as a template and spin up new boards from it in one click.
+
+---
+
+> **These features are not currently in development.** I built Kanban Block as a tool for my own workflow, and right now my focus is on building my agency's website. If you'd like to see any of these ideas become real — or just want to say thanks for what's already here — a donation goes a long way toward making that happen.
+
 ## Support
 
 If this plugin saved you time or made your workflow better, a small donation means a lot and helps keep the project alive. Thank you! 🙏
