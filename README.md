@@ -1,6 +1,6 @@
 # Kanban Block — Obsidian Plugin
 
-An Obsidian plugin that renders interactive Kanban boards directly inside fenced code blocks in your notes. No separate files, no sidebar — just a `kanban` code block anywhere in your markdown.
+Interactive Kanban boards that live inside your notes — not a separate file. Supports linked notes with configurable storage folder, tags, search, drag & drop, and select mode.
 
 [![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/raihancodes)
 [![PayPal](https://img.shields.io/badge/Support-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.me/raihancodes)
@@ -55,7 +55,7 @@ Create a code block with the language set to `kanban`:
 
 ````markdown
 ```kanban
-[v:1][maxHeight:400px][columnWidth:240px][notesFolder:_kanban-notes]
+[v:1]
 ## Todo
 - Buy groceries
 - [[Meeting Notes]]
