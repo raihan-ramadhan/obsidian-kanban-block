@@ -1070,12 +1070,14 @@ class KanbanRenderer extends MarkdownRenderChild {
     };
     document.addEventListener("keydown", this._escHandler, false);
 
-    // Shift held → add class to board for cursor override on links
+    // Shift/Ctrl/Cmd held → add class to board for cursor override on links
     document.addEventListener(
       "keydown",
       (e: KeyboardEvent) => {
         if (e.key === "Shift")
           this.containerEl.classList.add("kanban-shift-held");
+        if (e.key === "Control" || e.key === "Meta")
+          this.containerEl.classList.add("kanban-ctrl-held");
       },
       false,
     );
@@ -1084,6 +1086,8 @@ class KanbanRenderer extends MarkdownRenderChild {
       (e: KeyboardEvent) => {
         if (e.key === "Shift")
           this.containerEl.classList.remove("kanban-shift-held");
+        if (e.key === "Control" || e.key === "Meta")
+          this.containerEl.classList.remove("kanban-ctrl-held");
       },
       false,
     );
@@ -1091,6 +1095,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       "blur",
       () => {
         this.containerEl.classList.remove("kanban-shift-held");
+        this.containerEl.classList.remove("kanban-ctrl-held");
       },
       false,
     );
@@ -1135,6 +1140,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     const board = div("kanban-board");
     boardScroll.appendChild(board);
     this.boardEl = board;
+    if (this.selectMode) board.classList.add("kanban-select-mode");
 
     for (const col of this.columns) {
       // Sort cards for display only — pass original col so mutations work correctly
@@ -2505,6 +2511,14 @@ class KanbanRenderer extends MarkdownRenderChild {
     checkbox.checked = this.selectedCards.has(card.id);
     if (checkbox.checked) cardEl.classList.add("kanban-card-selected");
 
+    // Custom check icon overlay
+    const checkIcon = div("kanban-card-check-icon");
+    si(checkIcon, "check");
+    checkIcon.addEventListener("click", (e) => {
+      e.stopPropagation();
+      checkbox.click();
+    });
+
     checkbox.addEventListener("change", (e) => {
       e.stopPropagation();
       const allCardEls = Array.from(
@@ -2514,12 +2528,15 @@ class KanbanRenderer extends MarkdownRenderChild {
       this.toggleCardSelection(card.id, cardEl, allCardEls, colCards, false);
     });
 
-    // Shift+click, Ctrl/Cmd+click, or click in selectMode → select card
+    // Click in selectMode → select card; Ctrl/Shift/Cmd+click on link → disable link, select card
     cardEl.addEventListener("click", (e: MouseEvent) => {
-      const isSelectContext =
-        e.shiftKey || e.ctrlKey || e.metaKey || this.selectMode;
-      if (!isSelectContext) return;
-      if ((e.target as HTMLElement).closest("button, input, a")) return;
+      const hasModifier = e.shiftKey || e.ctrlKey || e.metaKey;
+      const onLink = !!(e.target as HTMLElement).closest("a");
+      if ((e.target as HTMLElement).closest("button, input")) return;
+      // On a link without modifier → let default behaviour (open note)
+      if (onLink && !hasModifier) return;
+      // Not in selectMode and no modifier → normal card click, do nothing
+      if (!this.selectMode && !hasModifier) return;
       e.preventDefault();
 
       const isRange = e.shiftKey;
@@ -2579,15 +2596,10 @@ class KanbanRenderer extends MarkdownRenderChild {
 
     menuBtn.addEventListener("click", openMenu);
 
-    if (this.selectMode) {
-      // In select mode: show checkbox, hide pencil+menu
-      checkbox.style.cssText =
-        "display:block!important;position:absolute!important;top:6px!important;right:6px!important;left:auto!important;width:22px!important;height:22px!important;margin:0!important;z-index:2";
-      cardEl.appendChild(checkbox);
-      // Don't append quickEditBtn and menuBtn
-    } else {
-      // Normal mode: checkbox on hover only, pencil+menu visible on hover
-      cardEl.appendChild(checkbox);
+    // Always append checkIcon (CSS controls visibility via .kanban-select-mode)
+    cardEl.appendChild(checkbox);
+    cardEl.appendChild(checkIcon);
+    if (!this.selectMode) {
       cardEl.appendChild(quickEditBtn);
       cardEl.appendChild(menuBtn);
     }
@@ -3679,7 +3691,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-card-link{color:var(--link-color, var(--interactive-accent));text-decoration:underline;cursor:pointer;font-size:inherit;background:none;border:none;padding:0}
       .kanban-card-link:hover{color:var(--link-color-hover, var(--interactive-accent-hover));text-decoration:underline}
       .kanban-shift-held .kanban-card-link,.kanban-shift-held .kanban-ghost-pill,.kanban-ctrl-held .kanban-card-link,.kanban-ctrl-held .kanban-ghost-pill{cursor:default!important;pointer-events:none!important}
-      .kanban-select-mode .kanban-card-link,.kanban-select-mode .kanban-ghost-pill{cursor:default!important;pointer-events:none!important}
+      
       .kanban-ghost-pill{display:inline-flex;align-items:center;gap:4px;cursor:pointer;border-radius:6px;padding:2px 4px 2px 2px;transition:background .15s;max-width:100%;overflow:hidden}
       .kanban-ghost-pill:hover{background:rgba(0,0,0,.04)}
       .kanban-ghost-icon{display:flex;align-items:center;opacity:.6;flex-shrink:0}.kanban-ghost-icon svg{width:12px;height:12px}
@@ -3702,7 +3714,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-modal-error{margin:4px 0 0;font-size:.8em;color:#e74c3c}
       .kanban-modal-check-row{display:flex;align-items:center;gap:6px;font-size:.85em;color:var(--text-normal);cursor:pointer;padding:4px 0;user-select:none}
       .kanban-modal-checkbox{cursor:pointer;accent-color:var(--interactive-accent)}
-      .kanban-card-checkbox{display:none;position:absolute;top:6px;right:6px;width:22px;height:22px;margin:0;cursor:pointer;accent-color:var(--interactive-accent);z-index:2}
+      .kanban-card-checkbox{display:none!important;position:absolute;top:6px;right:6px;width:22px;height:22px;margin:0;cursor:pointer;accent-color:var(--interactive-accent);z-index:2}.kanban-card-check-icon{display:none;position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:4px;border:1.5px solid var(--text-muted);background:var(--background-primary);z-index:3;box-sizing:border-box;align-items:center;justify-content:center;cursor:pointer}.kanban-card-check-icon svg{width:13px;height:13px;color:var(--text-muted);display:none}.kanban-card-selected .kanban-card-check-icon svg{display:block}.kanban-select-mode .kanban-card-check-icon{display:flex}.kanban-card-selected .kanban-card-check-icon{background:var(--interactive-accent)!important;border-color:var(--interactive-accent)!important}.kanban-card-selected .kanban-card-check-icon svg{color:#fff}
       .kanban-toolbar-btn-active{background:var(--interactive-accent)!important;color:#fff!important;border-color:var(--interactive-accent)!important}
       .kanban-toolbar-btn-active:hover{background:var(--interactive-accent)!important;color:#fff!important;opacity:.88}
       .kanban-select-btn{display:flex;align-items:center;gap:5px;padding:0 10px!important;width:auto!important}
