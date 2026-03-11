@@ -1,139 +1,224 @@
 # Kanban Block — Obsidian Plugin
 
-Add interactive Kanban boards directly inside your Obsidian notes using a `kanban` code block. No separate files needed — the board lives inside your markdown.
+An Obsidian plugin that renders interactive Kanban boards directly inside fenced code blocks in your notes. No separate files, no sidebar — just a `kanban` code block anywhere in your markdown.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Obsidian](https://img.shields.io/badge/Obsidian-0.15%2B-purple) ![License](https://img.shields.io/badge/license-MIT-green)
+[![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/raihancodes)
+[![PayPal](https://img.shields.io/badge/Support-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.me/raihancodes)
+
+---
+
+## Quick Start
+
+Create a code block with the language set to `kanban`:
+
+````markdown
+```kanban
+[v:1][maxHeight:400px][columnWidth:240px][notesFolder:_kanban-notes]
+## Todo
+- Buy groceries
+- [[Meeting Notes]]
+## In Progress
+- [[Feature Spec]]
+## Done
+- Plain card done
+```
+````
+
+Right-click inside the block for more options, or use the toolbar at the top.
+
+---
+
+## Real World Examples
+
+### Personal Todo
+
+````markdown
+```kanban
+[v:1][maxHeight:400px][columnWidth:220px][notesFolder:_kanban-notes]
+## Backlog [bg:#b8c8e8]
+- Research new framework
+- Read chapter 5
+## Today [bg:#fde68a]
+- [[Sprint Planning Notes]]
+- Buy groceries
+## Done [bg:#bbf7d0]
+- Fix login bug
+```
+````
+
+### CRM / Lead Tracker
+
+````markdown
+```kanban
+[v:1][maxHeight:500px][columnWidth:260px][notesFolder:/CRM/Clients]
+## Leads [bg:#bfdbfe]
+- [[Ahmad Fauzi]] #enterprise
+- [[PT Berkah Jaya]] #smb
+## Proposal Sent [bg:#fde68a]
+- [[Diana Putri]] #vip
+## Negotiation [bg:#fed7aa]
+- [[Rudi Hartono]] #enterprise
+## Closed Won [bg:#bbf7d0]
+- [[Sarah Smith]] #vip
+## Closed Lost [bg:#fecaca]
+- [[Old Lead]]
+```
+````
+
+### Project Tracker
+
+````markdown
+```kanban
+[v:1][maxHeight:450px][columnWidth:250px][notesFolder:/Projects/Active]
+## Planning [bg:#e9d5ff]
+- [[Website Redesign]]
+- [[API v2 Spec]]
+## In Progress [bg:#bfdbfe]
+- [[Mobile App MVP]]
+## Review [bg:#fde68a]
+- [[Dashboard UI]]
+## Shipped [bg:#bbf7d0]
+- [[Auth System]]
+```
+````
+
+### Content Calendar
+
+````markdown
+```kanban
+[v:1][maxHeight:400px][columnWidth:230px][notesFolder:content]
+## Ideas [bg:#e9d5ff]
+- [[YouTube: Obsidian Tips]]
+- Blog post: Productivity system
+## Writing [bg:#bae6fd]
+- [[Tutorial: Kanban Plugin]]
+## Review [bg:#fed7aa]
+- [[Video Script: Note-taking]]
+## Published [bg:#bbf7d0]
+- [[Blog: Getting Started with Obsidian]]
+```
+````
 
 ---
 
 ## Features
 
-- **Interactive board** — drag & drop cards between columns, reorder columns
-- **Inline editing** — click a card to edit, double-click a column title to rename
-- **Colored tags** — `#tagname` automatically gets a consistent color
-- **Convert to Page** — turn any card into a standalone `.md` file with one click
-- **Wikilink support** — `[[FileName]]` cards are clickable and open the linked file
-- **Real-time search** — filter cards instantly across all columns
-- **Configuration directives** — control height, column width, and pages folder
-- **Raw passthrough** — unrecognized lines (H1, H3, free text) are preserved on save
-- **Context menu insert** — right-click in editor → "Insert Kanban Block"
-- **Command palette** — `Ctrl+P` → "Insert Kanban Block"
-- **Dark & light mode** — follows your Obsidian theme automatically
-- **Auto-save** — every change is immediately saved back to the `.md` file
+### Core Board
+
+| Feature          | Description                                                 |
+| ---------------- | ----------------------------------------------------------- |
+| Columns          | Create, rename, delete, and reorder columns via drag & drop |
+| Cards            | Add, edit, delete, and drag cards between columns           |
+| Column color     | Set a background color per column                           |
+| Multi-line cards | Cards support multiple lines of text                        |
+| Tags             | Add `#tags` to cards for filtering                          |
+| Auto-save        | All changes are written back to the markdown file instantly |
+
+### Notes Integration
+
+| Feature              | Description                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linked note card     | Write `[[Note Name]]` to link a card to an existing note                                                                                          |
+| Ghost card           | `[[Note Name]]` with no existing file shows a `+` badge to create it                                                                              |
+| Convert to Note      | Convert any plain card into a linked note file                                                                                                    |
+| Open note            | Click a linked note to open it in a split pane                                                                                                    |
+| Rename note          | Rename a linked note — renames the file and updates the card                                                                                      |
+| Delete + file        | When deleting a linked card, optionally delete the `.md` file too                                                                                 |
+| Undo delete          | A 5-second toast appears after delete — click Undo to restore                                                                                     |
+| Vault-wide detection | `[[link]]` resolves files anywhere in the vault, not just `notesFolder`                                                                           |
+| Absolute path        | `notesFolder:/Database/Clients` resolves from vault root                                                                                          |
+| Relative path        | Notes saved in a subfolder next to the kanban file (e.g. `notesFolder:clients` with kanban at `Projects/board.md` → saves to `Projects/clients/`) |
+| Nested folders       | Auto-creates all parent folders (e.g. `/Projects/Active/Notes`)                                                                                   |
+
+### Toolbar & Search
+
+| Feature    | Description                                                  |
+| ---------- | ------------------------------------------------------------ |
+| Search     | Live search with highlighted matches across all cards        |
+| Sort       | Sort cards by title A-Z, Z-A, newest, or oldest              |
+| Filter     | Filter by All, Notes only, Plain only, or by tag             |
+| Properties | View and edit frontmatter tags on linked note cards          |
+| Directives | Edit `maxHeight`, `columnWidth`, and `notesFolder` via modal |
+
+### Select Mode
+
+| Feature              | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| Select Cards button  | Toggle select mode from toolbar                              |
+| Shift+click          | Range select from anchor card to clicked card                |
+| Ctrl/Cmd+click       | Toggle single card selection                                 |
+| Click in select mode | Toggle single card selection                                 |
+| Bulk delete          | Delete all selected cards at once                            |
+| Delete + files       | Optionally delete linked note files in bulk                  |
+| Undo bulk delete     | 5-second undo window after bulk delete                       |
+| Mutual exclusive     | Activating select on one block auto-cancels select on others |
+| Esc to cancel        | Press Escape to exit select mode                             |
+
+### UX & Interactions
+
+| Feature            | Description                                                              |
+| ------------------ | ------------------------------------------------------------------------ |
+| FLIP animation     | Smooth column slide animation during drag reorder                        |
+| Action bar         | Floating bar with count, Delete, and Cancel during select mode           |
+| Smart menus        | All dropdowns flip up/down automatically based on available space        |
+| Right-click menu   | Context menu with Add Column, Edit Directives, Copy Source, Delete Block |
+| Keyboard shortcuts | Esc cancels select mode; Enter saves; Shift+Enter for new line in cards  |
+| Tooltips           | All toolbar buttons show tooltips on hover                               |
+| Scroll memory      | Board scroll position is restored after re-render                        |
 
 ---
 
-## Usage
+## Directives
 
-### Basic Syntax
-
-````markdown
-```kanban
-## To Do
-- Buy coffee
-- Review team PR
-
-## In Progress
-- Build Obsidian plugin #dev
-- Design landing page #design
-
-## Done
-- Project setup #done
-```
-````
-
-### With Directives
-
-````markdown
-```kanban
-[v:1][maxHeight:400px][columnWidth:280px][pagesFolder:_kanban-notes]
-## To Do
-- First card
-## Done
-- Finished card
-```
-````
-
-### All Directives
-
-| Directive            | Example                | Default         | Description                                                       |
-| -------------------- | ---------------------- | --------------- | ----------------------------------------------------------------- |
-| `[v:N]`              | `[v:1]`                | `1`             | Format version — do not change manually                           |
-| `[maxHeight:X]`      | `[maxHeight:400px]`    | `400px`         | Max height of the cards area. Units: `px`, `vh`, `em`, `rem`, `%` |
-| `[columnWidth:X]`    | `[columnWidth:280px]`  | `240px`         | Width of each column. Units: `px`, `vw`, `em`, `rem`, `%`         |
-| `[pagesFolder:name]` | `[pagesFolder:_notes]` | `_kanban-notes` | Folder for files created by "Convert to Page"                     |
-
-Directives can be written in any order and are case-insensitive.
-
-### Column Background Color
+Directives are settings written in the first line of the kanban block:
 
 ```
-## Column Title [bg:#cce5ff]
+[v:1][maxHeight:400px][columnWidth:240px][notesFolder:_kanban-notes]
 ```
 
-Text color automatically adjusts (black or white) based on background brightness.
+| Directive     | Default         | Description                                                                                                                        |
+| ------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `v`           | `1`             | Format version (do not change manually)                                                                                            |
+| `maxHeight`   | `400px`         | Max height of each column card list                                                                                                |
+| `columnWidth` | `240px`         | Width of each column                                                                                                               |
+| `notesFolder` | `_kanban-notes` | Folder where new notes are saved. Without `/` prefix: created next to your kanban file. With `/` prefix: resolved from vault root. |
+
+### notesFolder Examples
+
+If your kanban block is inside `Projects/board.md`:
+
+| Directive                           | Notes saved to                     |
+| ----------------------------------- | ---------------------------------- |
+| `[notesFolder:_kanban-notes]`       | `Projects/_kanban-notes/`          |
+| `[notesFolder:clients]`             | `Projects/clients/`                |
+| `[notesFolder:/Database/Clients]`   | `Database/Clients/` (vault root)   |
+| `[notesFolder:/Projects/CRM/Leads]` | `Projects/CRM/Leads/` (vault root) |
+
+Paths **without** a leading `/` are created as a subfolder next to your kanban file.
+Paths **with** a leading `/` are always resolved from the vault root, regardless of where the kanban file is.
 
 ---
 
-## Installation (Manual)
-
-### 1. Clone & Build
-
-```bash
-git clone https://github.com/raihan-ramadhan/kanban-block
-cd kanban-block
-npm install
-npm run build
-```
-
-### 2. Copy to Your Vault
+## Card Syntax
 
 ```
-YourVault/.obsidian/plugins/kanban-block/
-├── main.js
-└── manifest.json
+- Plain card text
+- [[Linked Note]]
+- [[Note]] #tag1 #tag2
+- Multi-line card\nSecond line
 ```
-
-### 3. Enable the Plugin
-
-**Settings → Community Plugins → toggle "Kanban Block"**
-
-> ⚠️ Make sure "Safe Mode" is disabled under Community Plugins
 
 ---
 
-## Installation (BRAT)
+## Keyboard Shortcuts
 
-If the plugin is published to GitHub, you can install it via [BRAT](https://github.com/TfTHacker/obsidian42-brat):
-
-1. Install the BRAT plugin in Obsidian
-2. Open BRAT settings → "Add Beta Plugin"
-3. Enter this repository URL
-
----
-
-## How Convert to Page Works
-
-Click `⋯` on any card → "Convert to Page":
-
-1. A new `.md` file is created in the `pagesFolder` (default `_kanban-notes`)
-2. The folder is created automatically if it does not exist
-3. The card text becomes `[[FileName]]`
-4. The new file starts with `# FileName` as its initial content
-
-To delete all pages at once, simply delete the `_kanban-notes` folder.
-
----
-
-## Contributing
-
-Want to contribute? Read [DEVELOPMENT.md](DEVELOPMENT.md) to understand the architecture, how to add new features, and the development workflow.
-
-```bash
-npm run dev   # watch mode — auto rebuild on changes
-```
-
-Pull requests, bug reports, and feature ideas are welcome in [Issues](https://github.com/raihan-ramadhan/kanban-block/issues).
+| Shortcut         | Action                                                  |
+| ---------------- | ------------------------------------------------------- |
+| `Escape`         | Cancel select mode / close menus                        |
+| `Enter`          | Save card / confirm dialog                              |
+| `Shift+Enter`    | New line inside card editor                             |
+| `Shift+Click`    | Range select cards (auto-enables select mode)           |
+| `Ctrl/Cmd+Click` | Toggle single card selection (auto-enables select mode) |
 
 ---
 
@@ -154,4 +239,4 @@ Made with ❤️ by [Raihan Ramadhan](https://github.com/raihan-ramadhan)
 
 ## License
 
-MIT — free to use, modify, and distribute.
+MIT
