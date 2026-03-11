@@ -859,6 +859,8 @@ class KanbanRenderer extends MarkdownRenderChild {
   private actionBar: HTMLElement | null = null;
   private selectMode: boolean = false;
   private selectBtn: HTMLElement | null = null;
+  private sortBtn2: HTMLElement | null = null;
+  private filterBtn: HTMLElement | null = null;
 
   private _escHandler: ((e: KeyboardEvent) => void) | null = null;
   private _selectEventHandler: ((e: Event) => void) | null = null;
@@ -965,6 +967,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     setTooltip(sortBtn, "Sort");
     sortBtn.addEventListener("click", (e) => this.showSortMenu(e, sortBtn));
     toolbarRight.appendChild(sortBtn);
+    this.sortBtn2 = sortBtn;
 
     // Filter button
     const filterBtn = el("button", { cls: "kanban-toolbar-btn" });
@@ -974,6 +977,8 @@ class KanbanRenderer extends MarkdownRenderChild {
       this.showFilterMenu(e, filterBtn),
     );
     toolbarRight.appendChild(filterBtn);
+    this.filterBtn = filterBtn;
+    this.updateFilterSortBtns();
 
     // Properties button
     const propsBtn = el("button", { cls: "kanban-toolbar-btn" });
@@ -2622,6 +2627,16 @@ class KanbanRenderer extends MarkdownRenderChild {
     this.render();
   }
 
+  private updateFilterSortBtns() {
+    const sortActive = this.sortMode !== "none";
+    const filterActive = this.filterTags.size > 0 || this.filterType !== "all";
+    this.sortBtn2?.classList.toggle("kanban-toolbar-btn-outline", sortActive);
+    this.filterBtn?.classList.toggle(
+      "kanban-toolbar-btn-outline",
+      filterActive,
+    );
+  }
+
   private hideActionBar() {
     if (!this.actionBar) return;
     const bar = this.actionBar;
@@ -3097,6 +3112,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         const tag = opt.value === "none" ? null : `[s:${opt.value}]`;
         this.source = updateDirective(this.source, SORT_RE, tag);
         this.saveAndRender();
+        this.updateFilterSortBtns();
       });
       menu.appendChild(item);
     }
@@ -3147,6 +3163,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         this.filterType = opt.value;
         menu.remove();
         if (this.boardEl) this.applyFilters(this.boardEl);
+        this.updateFilterSortBtns();
       });
       menu.appendChild(item);
     }
@@ -3170,6 +3187,7 @@ class KanbanRenderer extends MarkdownRenderChild {
           else this.filterTags.add(tag);
           menu.remove();
           if (this.boardEl) this.applyFilters(this.boardEl);
+          this.updateFilterSortBtns();
         });
         menu.appendChild(item);
       }
@@ -3188,6 +3206,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         this.filterType = "all";
         menu.remove();
         if (this.boardEl) this.applyFilters(this.boardEl);
+        this.updateFilterSortBtns();
       });
       menu.appendChild(clearItem);
     }
@@ -3715,7 +3734,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       .kanban-modal-check-row{display:flex;align-items:center;gap:6px;font-size:.85em;color:var(--text-normal);cursor:pointer;padding:4px 0;user-select:none}
       .kanban-modal-checkbox{cursor:pointer;accent-color:var(--interactive-accent)}
       .kanban-card-checkbox{display:none!important;position:absolute;top:6px;right:6px;width:22px;height:22px;margin:0;cursor:pointer;accent-color:var(--interactive-accent);z-index:2}.kanban-card-check-icon{display:none;position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:4px;border:1.5px solid var(--text-muted);background:var(--background-primary);z-index:3;box-sizing:border-box;align-items:center;justify-content:center;cursor:pointer}.kanban-card-check-icon svg{width:13px;height:13px;color:var(--text-muted);display:none}.kanban-card-selected .kanban-card-check-icon svg{display:block}.kanban-select-mode .kanban-card-check-icon{display:flex}.kanban-card-selected .kanban-card-check-icon{background:var(--interactive-accent)!important;border-color:var(--interactive-accent)!important}.kanban-card-selected .kanban-card-check-icon svg{color:#fff}
-      .kanban-toolbar-btn-active{background:var(--interactive-accent)!important;color:#fff!important;border-color:var(--interactive-accent)!important}
+      .kanban-toolbar-btn-active{background:var(--interactive-accent)!important;color:#fff!important;border-color:var(--interactive-accent)!important}.kanban-toolbar-btn-outline{border-color:var(--interactive-accent)!important;color:var(--interactive-accent)!important}
       .kanban-toolbar-btn-active:hover{background:var(--interactive-accent)!important;color:#fff!important;opacity:.88}
       .kanban-select-btn{display:flex;align-items:center;gap:5px;padding:0 10px!important;width:auto!important}
       .kanban-toolbar-btn-icon{display:flex;align-items:center}.kanban-toolbar-btn-icon svg{width:14px;height:14px}
