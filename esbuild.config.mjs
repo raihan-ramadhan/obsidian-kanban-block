@@ -4,6 +4,7 @@ import builtins from "builtin-modules";
 
 const prod = process.argv[2] === "production";
 
+// Build JS
 const context = await esbuild.context({
   entryPoints: ["main.ts"],
   bundle: true,
@@ -34,7 +35,21 @@ const context = await esbuild.context({
 
 if (prod) {
   await context.rebuild();
+
+  // Minify styles.src.css → styles.css for release
+  await esbuild.build({
+    entryPoints: ["styles.src.css"],
+    outfile: "styles.css",
+    allowOverwrite: true,
+    minify: true,
+    logLevel: "info",
+  });
+
   process.exit(0);
 } else {
+  // Dev: copy styles.src.css → styles.css as-is (readable)
+  const { copyFileSync } = await import("fs");
+  copyFileSync("styles.src.css", "styles.css");
+
   await context.watch();
 }

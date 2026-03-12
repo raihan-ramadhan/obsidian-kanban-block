@@ -147,14 +147,14 @@ Right-click inside the block for more options, or use the toolbar at the top.
 
 ### Core Board
 
-| Feature          | Description                                                 |
-| ---------------- | ----------------------------------------------------------- |
-| Columns          | Create, rename, delete, and reorder columns via drag & drop |
-| Cards            | Add, edit, delete, and drag cards between columns           |
-| Column color     | Set a background color per column                           |
-| Multi-line cards | Cards support multiple lines of text                        |
-| Tags             | Add `#tags` to cards for filtering                          |
-| Auto-save        | All changes are written back to the markdown file instantly |
+| Feature          | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| Columns          | Create, rename, reorder columns via drag & drop, and delete with undo |
+| Cards            | Add, edit, delete (with undo), and drag cards between columns         |
+| Column color     | Set a background color per column                                     |
+| Multi-line cards | Cards support multiple lines of text                                  |
+| Tags             | Add `#tags` to cards for filtering                                    |
+| Auto-save        | All changes are written back to the markdown file instantly           |
 
 ### Notes Integration
 
@@ -165,8 +165,9 @@ Right-click inside the block for more options, or use the toolbar at the top.
 | Convert to Note      | Convert any plain card into a linked note file                                                                                                    |
 | Open note            | Click a linked note to open it in a split pane                                                                                                    |
 | Rename note          | Rename a linked note — renames the file and updates the card                                                                                      |
-| Delete + file        | When deleting a linked card, optionally delete the `.md` file too                                                                                 |
-| Undo delete          | A 5-second toast appears after delete — click Undo to restore                                                                                     |
+| Delete + file        | When deleting a linked card or column, optionally delete the `.md` file(s) too                                                                    |
+| Undo delete          | A 5-second toast appears after card or column delete — click Undo to restore                                                                      |
+| Undo column delete   | Deleting a column restores all its cards; linked files are only trashed after the undo window expires                                             |
 | Vault-wide detection | `[[link]]` resolves files anywhere in the vault, not just `notesFolder`                                                                           |
 | Absolute path        | `notesFolder:/Database/Clients` resolves from vault root                                                                                          |
 | Relative path        | Notes saved in a subfolder next to the kanban file (e.g. `notesFolder:clients` with kanban at `Projects/board.md` → saves to `Projects/clients/`) |
@@ -184,17 +185,18 @@ Right-click inside the block for more options, or use the toolbar at the top.
 
 ### Select Mode
 
-| Feature              | Description                                                  |
-| -------------------- | ------------------------------------------------------------ |
-| Select Cards button  | Toggle select mode from toolbar                              |
-| Shift+click          | Range select from anchor card to clicked card                |
-| Ctrl/Cmd+click       | Toggle single card selection                                 |
-| Click in select mode | Toggle single card selection                                 |
-| Bulk delete          | Delete all selected cards at once                            |
-| Delete + files       | Optionally delete linked note files in bulk                  |
-| Undo bulk delete     | 5-second undo window after bulk delete                       |
-| Mutual exclusive     | Activating select on one block auto-cancels select on others |
-| Esc to cancel        | Press Escape to exit select mode                             |
+| Feature              | Description                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| Select Cards button  | Toggle select mode from toolbar                                                                        |
+| Shift+click          | Range select from anchor card to clicked card                                                          |
+| Ctrl/Cmd+click       | Toggle single card selection                                                                           |
+| Click in select mode | Toggle single card selection                                                                           |
+| Bulk delete          | Delete all selected cards at once                                                                      |
+| Delete + files       | Optionally delete linked note files in bulk                                                            |
+| Undo bulk delete     | 5-second undo window after bulk delete                                                                 |
+| Disabled actions     | Add card and add column are disabled during select mode — clicking shakes the action bar as a reminder |
+| Mutual exclusive     | Activating select on one block auto-cancels select on others                                           |
+| Esc to cancel        | Press Escape to exit select mode                                                                       |
 
 ### UX & Interactions
 

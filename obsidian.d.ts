@@ -2,6 +2,11 @@ declare module "obsidian" {
   interface App {
     vault: Vault;
     workspace: Workspace;
+    fileManager: FileManager;
+  }
+
+  interface FileManager {
+    trashFile(file: TFile): Promise<void>;
   }
 
   interface Vault {
@@ -104,11 +109,13 @@ declare module "obsidian" {
     options?: { placement?: string },
   ): void;
 
-  class Notice {
-    constructor(message: string | DocumentFragment, timeout?: number);
+  interface Notice {
     setMessage(message: string | DocumentFragment): this;
     hide(): void;
   }
+  const Notice: {
+    new (message: string | DocumentFragment, timeout?: number): Notice;
+  };
 }
 
 // Obsidian augments HTMLElement and DocumentFragment with createEl, createDiv, createSpan
