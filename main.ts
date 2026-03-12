@@ -210,9 +210,9 @@ function kanbanConfirm(
     msg.className = "kanban-modal-msg";
     // Support HTML message (for styled highlights)
     if (message.includes("<")) {
-      const tmp = document.createElement("template");
-      tmp.innerHTML = message;
-      msg.appendChild(tmp.content.cloneNode(true));
+      const range = document.createRange();
+      range.selectNode(document.body);
+      msg.appendChild(range.createContextualFragment(message));
     } else {
       msg.textContent = message;
     }
@@ -277,9 +277,9 @@ function kanbanConfirmWithCheckbox(
     const msg = document.createElement("p");
     msg.className = "kanban-modal-msg";
     if (message.includes("<")) {
-      const tmp = document.createElement("template");
-      tmp.innerHTML = message;
-      msg.appendChild(tmp.content.cloneNode(true));
+      const range = document.createRange();
+      range.selectNode(document.body);
+      msg.appendChild(range.createContextualFragment(message));
     } else msg.textContent = message;
 
     const checkRow = document.createElement("label");
@@ -929,7 +929,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     const searchInput = el("input", {
       cls: "kanban-search-input",
       attr: { type: "text", placeholder: "Search..." },
-    }) as HTMLInputElement;
+    });
     const clearBtn = el("button", { cls: "kanban-search-clear" });
     si(clearBtn, "x");
     setTooltip(clearBtn, "Clear search");
@@ -1416,9 +1416,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       setCssProps(panel, {
         background: col.bgColor || "var(--background-secondary)",
       });
-      const input = el("input", {
-        cls: "kanban-rename-input",
-      }) as HTMLInputElement;
+      const input = el("input", { cls: "kanban-rename-input" });
       input.value = col.displayTitle;
       input.placeholder = "Column name...";
       const doneBtn = el("button", {
@@ -1638,9 +1636,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       colorItem.appendChild(el("span", { text: "Change color" }));
       colorItem.appendChild(colorItemSwatch);
       // ── color picker appended INSIDE colMenuEl so it's never "outside" ─────
-      const colorPicker = el("input", {
-        attr: { type: "color" },
-      }) as HTMLInputElement;
+      const colorPicker = el("input", { attr: { type: "color" } });
       colorPicker.className = "kanban-color-picker-input";
       colorPicker.value = col.bgColor || "#ffffff";
       colMenuEl.appendChild(colorPicker);
@@ -1902,7 +1898,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       cardEl.classList.remove("kanban-dragging");
       // Clean up any lingering drop indicators across all columns
       document.querySelectorAll(".kanban-drop-indicator").forEach((el) => {
-        (el as HTMLElement).classList.add("kanban-hidden");
+        el.classList.add("kanban-hidden");
       });
     });
 
@@ -1986,7 +1982,9 @@ class KanbanRenderer extends MarkdownRenderChild {
           this.render();
         };
 
-        ghostPill.addEventListener("click", createPage);
+        ghostPill.addEventListener("click", (e) => {
+          void createPage(e);
+        });
         textEl.appendChild(ghostPill);
       }
 
@@ -2038,9 +2036,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     // ── Action handlers ───────────────────────────────────────────────────────
     const doEdit = () => {
       closeMenu();
-      const textarea = el("textarea", {
-        cls: "kanban-card-edit-input",
-      }) as HTMLTextAreaElement;
+      const textarea = el("textarea", { cls: "kanban-card-edit-input" });
       textarea.value = card.text;
       cardEl.replaceChildren();
       cardEl.appendChild(textarea);
@@ -2286,9 +2282,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       si(rowIcon, "hash");
       const labelEl = el("span", { cls: "kanban-props-label", text: "Tags" });
       const currentTags = (card.text.match(/#[\w-]+/g) || []).join(" ");
-      const input = el("input", {
-        cls: "kanban-props-input",
-      }) as HTMLInputElement;
+      const input = el("input", { cls: "kanban-props-input" });
       input.value = currentTags;
       input.placeholder = "#tag1 #tag2";
       row.appendChild(rowIcon);
@@ -2637,9 +2631,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     }
 
     // ── Checkbox for multi-select ───────────────────────────────────────────
-    const checkbox = el("input", {
-      cls: "kanban-card-checkbox",
-    }) as HTMLInputElement;
+    const checkbox = el("input", { cls: "kanban-card-checkbox" });
     checkbox.type = "checkbox";
     checkbox.checked = this.selectedCards.has(card.id);
     if (checkbox.checked) cardEl.classList.add("kanban-card-selected");
@@ -2810,7 +2802,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     const deleteBtn = el("button", {
       cls: "kanban-action-bar-delete",
       text: "Delete",
-    }) as HTMLButtonElement;
+    });
     if (count === 0) {
       deleteBtn.disabled = true;
       deleteBtn.classList.add("kanban-btn-disabled");
@@ -3066,7 +3058,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         placeholder:
           "Card text... gunakan #tag\n(Enter simpan, Shift+Enter baris baru)",
       },
-    }) as HTMLTextAreaElement;
+    });
     const actionsEl = div("kanban-add-input-actions");
     const saveBtn = el("button", { cls: "kanban-save-btn", text: "Add" });
     const cancelBtn = el("button", {
@@ -3488,7 +3480,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         const anchor = this.containerEl;
         const name = await kanbanPrompt(
           "Column name:",
-          anchor as HTMLElement,
+          anchor,
           "e.g. In Progress",
           "Create",
         );
@@ -3542,7 +3534,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         menu.remove();
         const confirmed = await kanbanConfirm(
           `Delete this entire Kanban block? This cannot be undone.`,
-          this.containerEl as HTMLElement,
+          this.containerEl,
           "Delete",
           true,
         );
@@ -3614,7 +3606,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     const title = document.createElement("p");
     title.className = "kanban-modal-msg";
     title.classList.add("kanban-props-modal-title");
-    title.textContent = "Board Directives";
+    title.textContent = "Board directives";
     modal.appendChild(title);
 
     const mkField = (label: string, value: string, placeholder: string) => {
@@ -3633,17 +3625,17 @@ class KanbanRenderer extends MarkdownRenderChild {
     };
 
     const { wrap: mhWrap, inp: mhInp } = mkField(
-      "Max Height",
+      "Max height",
       curMaxHeight,
       "e.g. 400px",
     );
     const { wrap: cwWrap, inp: cwInp } = mkField(
-      "Column Width",
+      "Column width",
       curColWidth,
       "e.g. 240px",
     );
     const { wrap: nfWrap, inp: nfInp } = mkField(
-      "Notes Folder",
+      "Notes folder",
       curNotesFolder,
       "e.g. _kanban-notes or /Database/Clients",
     );

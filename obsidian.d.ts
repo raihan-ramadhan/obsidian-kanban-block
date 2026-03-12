@@ -34,7 +34,7 @@ declare module "obsidian" {
     ): EventRef;
   }
 
-  interface EventRef {}
+  type EventRef = object;
 
   interface Menu {
     addItem(cb: (item: MenuItem) => void): this;
