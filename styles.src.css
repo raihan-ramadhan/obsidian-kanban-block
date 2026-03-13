@@ -1406,6 +1406,9 @@
   pointer-events: none;
   user-select: none;
 }
+.kanban-directive-unit-label::after {
+  content: "px";
+}
 .kanban-directive-reset-btn {
   background: none;
   border: none;

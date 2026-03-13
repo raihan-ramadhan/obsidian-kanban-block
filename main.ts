@@ -2164,7 +2164,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       // Build filename from first line
       const filename = firstLine
         .replace(/#[\w-]+/g, "")
-        .replace(/[\\/:*?"<>|#^\[\]]/g, "")
+        .replace(/[\\/:*?"<>|#^[\]]/g, "")
         .trim();
       if (!filename) return;
 
@@ -3122,9 +3122,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       let visibleCount = 0;
 
       cards.forEach((cardEl) => {
-        const textEl = cardEl.querySelector(
-          ".kanban-card-text",
-        ) as HTMLElement | null;
+        const textEl = cardEl.querySelector<HTMLElement>(".kanban-card-text");
         if (!textEl) return;
 
         if (!cardEl.dataset.plainText) {
@@ -3648,7 +3646,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       numInp.step = "1";
 
       const pxLabel = document.createElement("span");
-      pxLabel.textContent = "px";
+      pxLabel.setAttribute("aria-hidden", "true");
       pxLabel.classList.add("kanban-directive-unit-label");
 
       inputWrap.appendChild(numInp);
