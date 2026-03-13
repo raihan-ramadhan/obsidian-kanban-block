@@ -753,7 +753,19 @@ type SortMode =
 function parseSort(source: string): SortMode {
   for (const line of source.split("\n")) {
     const match = line.match(SORT_RE);
-    if (match) return match[1].trim() as SortMode;
+    if (match) {
+      const val = match[1].trim();
+      const modes = [
+        "title-asc",
+        "title-desc",
+        "updated-desc",
+        "updated-asc",
+        "tag-asc",
+        "none",
+      ] as const;
+      const found = modes.find((m) => m === val);
+      if (found) return found;
+    }
   }
   return "none";
 }
@@ -792,7 +804,7 @@ function parseShowProps(source: string): Set<PropKey> {
       const props = match[1]
         .split(",")
         .map((p) => p.trim())
-        .filter(Boolean) as PropKey[];
+        .filter((p): p is PropKey => p.length > 0);
       return new Set(props);
     }
   }
@@ -2183,7 +2195,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       const pageExists = !!existingFile;
       // Use the actual existing filename (correct case) if found
       const actualFilename = existingFile
-        ? existingFile.name.replace(/\.md$/, "")
+        ? existingFile.name.slice(0, -3)
         : filename;
       const actualFilePath = existingFile ? existingFile.path : filePath;
 
@@ -2227,7 +2239,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       closeMenu();
       const linkedFile = getLinkedFile();
       if (!linkedFile) return;
-      const currentName = linkedFile.name.replace(/\.md$/, "");
+      const currentName = linkedFile.name.slice(0, -3);
       const folder = getFolderPath(linkedFile.path); // keep file in its current folder
 
       const newName = await kanbanPrompt(
@@ -2463,7 +2475,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         const renameItem = mkItem("pencil", "Rename...");
         renameItem.addEventListener("click", (e) => {
           e.stopPropagation();
-          doRename();
+          void doRename();
         });
         menuEl.appendChild(renameItem);
 
@@ -2482,7 +2494,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         const delItem = mkItem("trash-2", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
           e.stopPropagation();
-          doDelete();
+          void doDelete();
         });
         menuEl.appendChild(delItem);
       } else if (isWikilink && !linkedFileExists) {
@@ -2524,7 +2536,7 @@ class KanbanRenderer extends MarkdownRenderChild {
         const delItem = mkItem("trash-2", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
           e.stopPropagation();
-          doDelete();
+          void doDelete();
         });
         menuEl.appendChild(delItem);
       } else {
@@ -2539,14 +2551,14 @@ class KanbanRenderer extends MarkdownRenderChild {
         const pageItem = mkItem("file-plus", "Convert to note");
         pageItem.addEventListener("click", (e) => {
           e.stopPropagation();
-          doConvertToPage();
+          void doConvertToPage();
         });
         menuEl.appendChild(pageItem);
 
         const delItem = mkItem("trash-2", "Delete", "kanban-dropdown-danger");
         delItem.addEventListener("click", (e) => {
           e.stopPropagation();
-          doDelete();
+          void doDelete();
         });
         menuEl.appendChild(delItem);
       }
@@ -2605,7 +2617,7 @@ class KanbanRenderer extends MarkdownRenderChild {
     quickEditBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (isLinkedNoteCard) {
-        doRename();
+        void doRename();
       } else {
         doEdit();
       }
@@ -3590,10 +3602,18 @@ class KanbanRenderer extends MarkdownRenderChild {
   }
 
   private showDirectivesModal() {
-    // Parse current values
+    // Parse current values — split into number + unit
     const curMaxHeight = parseMaxHeight(this.source);
     const curColWidth = parseColWidth(this.source);
     const curNotesFolder = parseNotesFolder(this.source);
+
+    const extractNum = (val: string): string => {
+      const match = val.match(/^([\d.]+)/);
+      return match ? match[1] : val;
+    };
+
+    const mhSplit = { num: extractNum(curMaxHeight) };
+    const cwSplit = { num: extractNum(curColWidth) };
 
     // Build modal
     const backdrop = document.createElement("div");
@@ -3609,7 +3629,37 @@ class KanbanRenderer extends MarkdownRenderChild {
     title.textContent = "Board directives";
     modal.appendChild(title);
 
-    const mkField = (label: string, value: string, placeholder: string) => {
+    // Number + px field builder
+    const mkUnitField = (label: string, numVal: string, minVal: number) => {
+      const wrap = document.createElement("div");
+      wrap.classList.add("kanban-props-wrap");
+      const lbl = document.createElement("label");
+      lbl.textContent = label;
+      lbl.classList.add("kanban-props-field-label");
+
+      const inputWrap = document.createElement("div");
+      inputWrap.classList.add("kanban-directive-input-wrap");
+
+      const numInp = document.createElement("input");
+      numInp.type = "number";
+      numInp.className = "kanban-modal-input kanban-directive-num-input";
+      numInp.value = numVal;
+      numInp.min = String(minVal);
+      numInp.step = "1";
+
+      const pxLabel = document.createElement("span");
+      pxLabel.textContent = "px";
+      pxLabel.classList.add("kanban-directive-unit-label");
+
+      inputWrap.appendChild(numInp);
+      inputWrap.appendChild(pxLabel);
+      wrap.appendChild(lbl);
+      wrap.appendChild(inputWrap);
+      return { wrap, numInp };
+    };
+
+    // Text field builder (for notes folder)
+    const mkTextField = (label: string, value: string, placeholder: string) => {
       const wrap = document.createElement("div");
       wrap.classList.add("kanban-props-wrap");
       const lbl = document.createElement("label");
@@ -3624,25 +3674,39 @@ class KanbanRenderer extends MarkdownRenderChild {
       return { wrap, inp };
     };
 
-    const { wrap: mhWrap, inp: mhInp } = mkField(
+    const { wrap: mhWrap, numInp: mhNum } = mkUnitField(
       "Max height",
-      curMaxHeight,
-      "e.g. 400px",
+      mhSplit.num,
+      50,
     );
-    const { wrap: cwWrap, inp: cwInp } = mkField(
+    const { wrap: cwWrap, numInp: cwNum } = mkUnitField(
       "Column width",
-      curColWidth,
-      "e.g. 240px",
+      cwSplit.num,
+      80,
     );
-    const { wrap: nfWrap, inp: nfInp } = mkField(
+    const { wrap: nfWrap, inp: nfInp } = mkTextField(
       "Notes folder",
       curNotesFolder,
       "e.g. _kanban-notes or /Database/Clients",
     );
 
+    // Reset to defaults button
+    const resetRow = document.createElement("div");
+    resetRow.classList.add("kanban-directive-reset-row");
+    const resetBtn = document.createElement("button");
+    resetBtn.classList.add("kanban-directive-reset-btn");
+    resetBtn.textContent = "Reset to defaults";
+    resetBtn.addEventListener("click", () => {
+      mhNum.value = "400";
+      cwNum.value = "240";
+      nfInp.value = "_kanban-notes";
+    });
+    resetRow.appendChild(resetBtn);
+
     modal.appendChild(mhWrap);
     modal.appendChild(cwWrap);
     modal.appendChild(nfWrap);
+    modal.appendChild(resetRow);
 
     const btnRow = document.createElement("div");
     btnRow.className = "kanban-modal-btns";
@@ -3657,7 +3721,12 @@ class KanbanRenderer extends MarkdownRenderChild {
     saveBtn.textContent = "Apply";
     saveBtn.addEventListener("click", () => {
       backdrop.remove();
-      // Strip all existing directive tokens from source, rebuild header
+      const mhVal = Math.max(50, parseFloat(mhNum.value) || 400);
+      const cwVal = Math.max(80, parseFloat(cwNum.value) || 240);
+      const mh = `${mhVal}px`;
+      const cw = `${cwVal}px`;
+      const nf = nfInp.value.trim() || DEFAULT_NOTES_FOLDER;
+
       let newSource = this.source
         .split("\n")
         .filter(
@@ -3669,9 +3738,6 @@ class KanbanRenderer extends MarkdownRenderChild {
         )
         .join("\n");
 
-      const mh = mhInp.value.trim() || DEFAULT_MAX_HEIGHT;
-      const cw = cwInp.value.trim() || DEFAULT_COL_WIDTH;
-      const nf = nfInp.value.trim() || DEFAULT_NOTES_FOLDER;
       const newHeader = `[v:${CURRENT_FORMAT_VERSION}][maxHeight:${mh}][columnWidth:${cw}][notesFolder:${nf}]`;
       newSource = newHeader + "\n" + newSource.trimStart();
 
@@ -3689,7 +3755,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       if (ev.target === backdrop) backdrop.remove();
     });
     document.body.appendChild(backdrop);
-    mhInp.focus();
+    mhNum.focus();
   }
 
   private async saveAndRender() {
