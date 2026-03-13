@@ -762,9 +762,9 @@ function parseSort(source: string): SortMode {
         "updated-asc",
         "tag-asc",
         "none",
-      ] as const;
+      ];
       const found = modes.find((m) => m === val);
-      if (found) return found;
+      if (found) return found as SortMode;
     }
   }
   return "none";
@@ -1950,7 +1950,7 @@ class KanbanRenderer extends MarkdownRenderChild {
           const file = resolveWikiFile();
           if (file) {
             const leaf = this.obsApp.workspace.getLeaf("split");
-            leaf.openFile(file);
+            void leaf.openFile(file);
           }
         });
         textEl.appendChild(linkEl);
@@ -1989,7 +1989,7 @@ class KanbanRenderer extends MarkdownRenderChild {
           const newFile = this.obsApp.vault.getFileByPath(filePath);
           if (newFile) {
             const leaf = this.obsApp.workspace.getLeaf("split");
-            leaf.openFile(newFile);
+            void leaf.openFile(newFile);
           }
           this.render();
         };
@@ -2415,7 +2415,7 @@ class KanbanRenderer extends MarkdownRenderChild {
       closeMenu();
       const file = getLinkedFile();
       if (!file) return;
-      this.obsApp.workspace.getLeaf(mode).openFile(file);
+      void this.obsApp.workspace.getLeaf(mode).openFile(file);
     };
 
     // ── Dropdown menu ─────────────────────────────────────────────────────────
@@ -2517,7 +2517,7 @@ class KanbanRenderer extends MarkdownRenderChild {
             const newFile = this.obsApp.vault.getFileByPath(filePath);
             if (newFile) {
               const leaf = this.obsApp.workspace.getLeaf("split");
-              leaf.openFile(newFile);
+              void leaf.openFile(newFile);
             }
             this.render();
           })();
@@ -3850,7 +3850,7 @@ export default class KanbanBlockPlugin extends Plugin {
         menu.addSeparator();
         menu.addItem((item: MenuItem) => {
           item
-            .setTitle("Insert Kanban Block")
+            .setTitle("Insert kanban block")
             .setIcon("layout-dashboard")
             .setSection("insert")
             .onClick(() => insertKanbanBlock(editor));
